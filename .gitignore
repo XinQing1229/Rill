@@ -4,6 +4,11 @@ node_modules/
 # build output
 dist/
 coverage/
+backend/generated/
+
+# database
+*.db
+*.db-journal
 
 # env (real keys live here, never commit)
 .env

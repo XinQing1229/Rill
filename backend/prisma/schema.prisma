@@ -1,0 +1,45 @@
+// Prisma schema（SQLite）
+// 注意：SQLite 不支持 enum 与 Json 类型，枚举以 String 存储，结构化内容以 JSON 字符串存储
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Project {
+  id                   String   @id @default(cuid())
+  title                String
+  genre                String
+  length               String
+  mode                 String   @default("manual") // manual | auto
+  currentStage         String
+  status               String   @default("idle") // idle | running | done | failed
+  // 问卷答案（JSON 字符串）：必答 4 项 + 选答 + 类型级联项
+  answers              String   @default("{}")
+  questionnaireVersion String   @default("v1")
+  promptTokens         Int      @default(0)
+  completionTokens     Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  premise Premise?
+}
+
+model Premise {
+  id               String   @id @default(cuid())
+  projectId        String   @unique
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // 种子产物（JSON 字符串），按 PremiseSchema 校验后写入；不含问卷已选维度
+  data             String
+  status           String   @default("pending") // pending | generating | done | failed
+  stale            Boolean  @default(false)
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  error            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

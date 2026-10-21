@@ -19,6 +19,6 @@ import { LlmService } from './llm.service';
     UsageRecorder,
     LlmService,
   ],
-  exports: [LlmService],
+  exports: [LlmService, UsageRecorder, PromptRegistry],
 })
 export class AiModule {}

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { HealthController } from './health/health.controller';
 import { LlmModule } from './llm/llm.module';
+import { NovelModule } from './novel/novel.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { LlmModule } from './llm/llm.module';
       load: [configuration],
     }),
     LlmModule,
+    NovelModule,
   ],
   controllers: [HealthController],
 })

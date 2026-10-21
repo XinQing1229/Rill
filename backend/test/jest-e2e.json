@@ -1,8 +1,9 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
+  "rootDir": "..",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
+  "globalSetup": "<rootDir>/test/setup-db.ts",
   "transform": {
     "^.+\\.ts$": "ts-jest"
   }

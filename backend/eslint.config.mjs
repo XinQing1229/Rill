@@ -4,7 +4,8 @@ import prettierConfig from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    // generated/ 为 Prisma 生成产物；prisma7.config.ts 不参与编译，均不做类型化检查
+    ignores: ['dist/**', 'node_modules/**', 'generated/**', 'prisma7.config.ts'],
   },
   {
     files: ['**/*.ts'],
