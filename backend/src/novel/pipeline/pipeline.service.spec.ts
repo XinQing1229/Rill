@@ -115,6 +115,41 @@ describe('PipelineService', () => {
     release();
   });
 
+  it('生成超时后把阶段与项目标记为失败，项目不会卡在 running', async () => {
+    const project = await service.create({ title: '超时测试', answers });
+    // 永不决断的生成任务
+    premiseGenerate.mockImplementation(() => new Promise<void>(() => undefined));
+    (service as unknown as { generationTimeoutMs: number }).generationTimeoutMs = 50;
+
+    await expect(service.generate(project.id, { wait: true })).rejects.toThrow(/生成超时/);
+
+    const after = await service.get(project.id);
+    expect(after.premise?.status).toBe('failed');
+    expect(after.premise?.error).toContain('生成超时');
+    expect(after.status).toBe('failed');
+
+    // 关键：项目不再卡在 running，后续生成可以再次触发
+    premiseGenerate.mockResolvedValue(undefined);
+    const retried = await service.generate(project.id, { force: true, wait: true });
+    expect(retried.started).toBe(true);
+  });
+
+  it('已失效的完成产物不会被当作可用产物跳过', async () => {
+    const project = await service.create({ title: '失效测试', answers });
+    await service.generate(project.id, { wait: true });
+    await service.confirm(project.id);
+
+    // 回退后种子被标记失效，回到 premise 重新生成时应实际触发
+    await service.rollback(project.id, 'premise');
+    await prisma.premise.update({ where: { projectId: project.id }, data: { stale: true } });
+    premiseGenerate.mockClear();
+
+    const result = await service.generate(project.id, { wait: true });
+
+    expect(result.started).toBe(true);
+    expect(premiseGenerate).toHaveBeenCalledTimes(1);
+  });
+
   it('生成失败时标记为 failed', async () => {
     premiseGenerate.mockRejectedValue(new Error('模型调用失败'));
     const project = await service.create({ title: '测试作品', answers });

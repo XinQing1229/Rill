@@ -1,4 +1,4 @@
-/* Rill prototype — sample data, written before the markup.
+/* Rill prototype: sample data, written before the markup.
    Truthful to the backend contracts: PremiseSchema / GenericWorldSchema + xuanhuan powerSystem /
    CharacterListSchema / RelationListSchema. Medium-length character count is 8 (genre-profile). */
 window.RILL = (() => {

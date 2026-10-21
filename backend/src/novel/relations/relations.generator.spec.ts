@@ -130,7 +130,7 @@ describe('RelationGenerator', () => {
     expect(row.toRole).toBe('复仇者');
   });
 
-  it('同一对人物只存一条关系', async () => {
+  it('同一对人物只存一条关系，描述合并不丢弃', async () => {
     const { generator, completeStructured, create } = setup();
     completeStructured.mockResolvedValue({
       relations: [
@@ -148,7 +148,7 @@ describe('RelationGenerator', () => {
           type: '仇敌',
           fromRole: '仇人',
           toRole: '复仇者',
-          description: '重复描述',
+          description: '旧账未清',
         },
       ],
     });
@@ -156,7 +156,39 @@ describe('RelationGenerator', () => {
     await generator.generate({ characters: contextCharacters }, answers, 'p1');
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(create.mock.calls[0][0].data.description).toBe('灭门之仇');
+    expect(create.mock.calls[0][0].data.description).toBe('灭门之仇；旧账未清');
+  });
+
+  it('同一对人物的多重关系合并为一条并保留类型信息', async () => {
+    const { generator, completeStructured, create } = setup();
+    completeStructured.mockResolvedValue({
+      relations: [
+        {
+          fromName: '甲',
+          toName: '乙',
+          type: '仇敌',
+          fromRole: '复仇者',
+          toRole: '仇人',
+          description: '灭门之仇',
+        },
+        {
+          fromName: '乙',
+          toName: '甲',
+          type: '利益',
+          fromRole: '买主',
+          toRole: '掮客',
+          description: '买卖旧物',
+        },
+      ],
+    });
+
+    await generator.generate({ characters: contextCharacters }, answers, 'p1');
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const row = create.mock.calls[0][0].data;
+    // 保留先到的主关系类型，附加关系的类型以标注形式并入描述
+    expect(row.type).toBe('仇敌');
+    expect(row.description).toBe('灭门之仇；[利益] 买卖旧物');
   });
 
   it('跳过引用不存在人物的关系', async () => {

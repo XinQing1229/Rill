@@ -1,4 +1,4 @@
-/* Rill prototype — page styles on top of app.css (framed-sheet, seed 312220389) */
+/* Rill prototype: page styles on top of app.css (framed-sheet, seed 312220389) */
 
 /* ---------- L-frame shell: sidebar + top bar share one tinted ground, no rule between ---------- */
 .frame {
@@ -107,6 +107,14 @@
 .sheet-body {
   padding: var(--pad);
   overflow: auto;
+}
+/* a short screen hugs its content: the sheet does not stretch over empty ground */
+.sheet.hug {
+  align-self: start;
+  max-height: calc(100svh - 56px);
+}
+.sheet.hug .sheet-body {
+  overflow: visible;
 }
 
 /* ---------- title row inside the sheet ---------- */
@@ -427,6 +435,12 @@
 }
 
 /* ---------- list rows ---------- */
+.sub.clip {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .proj + .proj {
   border-top: 1px solid var(--rule);
 }
@@ -478,8 +492,70 @@
 }
 
 /* ---------- questionnaire wizard ---------- */
-.wizard {
-  max-width: 760px;
+.wizard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--gap);
+  align-items: start;
+}
+.summary-rail {
+  position: sticky;
+  top: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+}
+.summary-rail h2 {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+.summary-rail .meta {
+  font-size: var(--fs-small);
+  color: var(--muted);
+  margin: 2px 0 8px;
+}
+.summary-rail .kv {
+  grid-template-columns: 84px minmax(0, 1fr);
+}
+.summary-rail .kv dt,
+.summary-rail .kv dd {
+  padding: 5px 0;
+}
+.summary-rail .rule {
+  height: 1px;
+  background: var(--rule);
+  margin: 14px -16px;
+}
+.preview {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.preview li {
+  display: grid;
+  gap: 1px;
+  padding-left: 14px;
+  position: relative;
+}
+.preview li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--control);
+}
+.preview b {
+  font-size: var(--fs-body);
+  font-weight: 500;
+}
+.preview span {
+  font-size: var(--fs-small);
+  color: var(--muted);
 }
 .steps {
   display: flex;
@@ -607,6 +683,12 @@
   .form-grid,
   .genre-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .wizard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .summary-rail {
+    position: static;
   }
   .proj .stage-cell {
     min-width: 0;

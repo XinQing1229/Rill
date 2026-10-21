@@ -136,7 +136,7 @@
       </header>
 
       <!-- the sheet: white, inset 8px from the right and bottom edges -->
-      <main class="sheet">
+      <main class="sheet hug">
         <div class="sheet-body">
           <div class="title-row">
             <div>
@@ -168,7 +168,22 @@
             </div>
           </div>
 
-          <div class="rows" id="rows"></div>
+          <div class="grid" style="margin-top: 8px">
+            <div class="panel" style="grid-column: span 7">
+              <header>
+                <h2>全部项目</h2>
+                <span class="meta">3 个</span>
+              </header>
+              <div class="rows" id="rows"></div>
+            </div>
+            <div class="panel" style="grid-column: span 5">
+              <header>
+                <h2>最近动态</h2>
+                <span class="meta">今天</span>
+              </header>
+              <div class="rows" id="feed"></div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -197,6 +212,54 @@
         ?.addEventListener('click', () =>
           document.querySelector('.sidebar').classList.toggle('open'),
         );
+
+      const feed = [
+        {
+          t: '14:31',
+          what: '生成 人物 · 8 位',
+          who: '青川令',
+          note: '2,905 in / 4,512 out',
+          state: 'warn',
+          mark: '待确认',
+        },
+        {
+          t: '14:02',
+          what: '生成 世界观',
+          who: '青川令',
+          note: '2,317 in / 3,884 out',
+          state: '',
+          mark: '已完成',
+        },
+        {
+          t: '13:58',
+          what: '生成 种子',
+          who: '青川令',
+          note: '1,842 in / 1,206 out',
+          state: '',
+          mark: '已完成',
+        },
+        {
+          t: '昨天 21:07',
+          what: '人物 生成失败',
+          who: '她的海',
+          note: '输出不符合结构定义，未写入',
+          state: 'neg',
+          mark: '失败',
+        },
+      ];
+      document.getElementById('feed').innerHTML = feed
+        .map(
+          (f) => `
+    <div class="row" style="align-items: flex-start">
+      <span style="font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); width: 76px; flex: none; padding-top: 2px">${f.t}</span>
+      <span style="min-width: 0; flex: 1">
+        <span style="font-weight: 500">${f.who} · ${f.what}</span>
+        <span class="sub clip">${f.note}</span>
+      </span>
+      <span class="pill ${f.state}" style="margin-left: auto">${f.mark}</span>
+    </div>`,
+        )
+        .join('');
     </script>
   </body>
 </html>

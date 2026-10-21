@@ -1,13 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { Genre, GENRES, PipelineMode, QuestionnaireAnswers, Stage } from '@rill/shared';
+import { Body, Controller, Get, NotFoundException, Param, Post, Query } from '@nestjs/common';
+import {
+  CreateProjectSchema,
+  GENRES,
+  GenerateBodySchema,
+  Genre,
+  RollbackBodySchema,
+  SetModeBodySchema,
+} from '@rill/shared';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { PipelineService } from './pipeline/pipeline.service';
 import { QuestionnaireService } from './questionnaire/questionnaire';
-
-interface CreateProjectBody {
-  title: string;
-  answers: QuestionnaireAnswers;
-  mode?: PipelineMode;
-}
 
 @Controller('novel')
 export class NovelController {
@@ -21,14 +23,14 @@ export class NovelController {
   getQuestionnaire(@Query('genre') genre: string) {
     const valid = GENRES.find((item) => item === genre);
     if (!valid) {
-      return { error: `未知类型: ${genre}`, available: GENRES };
+      throw new NotFoundException(`未知类型: ${genre}，可用: ${GENRES.join(', ')}`);
     }
     return this.questionnaire.build(valid as Genre);
   }
 
   @Post('projects')
-  create(@Body() body: CreateProjectBody) {
-    return this.pipeline.create(body);
+  create(@Body(new ZodValidationPipe(CreateProjectSchema)) body: unknown) {
+    return this.pipeline.create(body as Parameters<PipelineService['create']>[0]);
   }
 
   @Get('projects/:id')
@@ -38,8 +40,11 @@ export class NovelController {
 
   /** 触发生成：立即返回，状态由流水线推进 */
   @Post('projects/:id/generate')
-  generate(@Param('id') id: string, @Body() body?: { force?: boolean; wait?: boolean }) {
-    return this.pipeline.generate(id, body ?? {});
+  generate(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(GenerateBodySchema)) body: unknown,
+  ) {
+    return this.pipeline.generate(id, body as { force?: boolean; wait?: boolean });
   }
 
   @Post('projects/:id/confirm')
@@ -48,8 +53,14 @@ export class NovelController {
   }
 
   @Post('projects/:id/rollback')
-  rollback(@Param('id') id: string, @Body() body: { stage: Stage }) {
-    return this.pipeline.rollback(id, body.stage);
+  rollback(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(RollbackBodySchema)) body: unknown,
+  ) {
+    return this.pipeline.rollback(
+      id,
+      (body as { stage: Parameters<PipelineService['rollback']>[1] }).stage,
+    );
   }
 
   /** 人物列表（含状态） */
@@ -65,7 +76,10 @@ export class NovelController {
   }
 
   @Post('projects/:id/mode')
-  setMode(@Param('id') id: string, @Body() body: { mode: PipelineMode }) {
-    return this.pipeline.setMode(id, body.mode);
+  setMode(@Param('id') id: string, @Body(new ZodValidationPipe(SetModeBodySchema)) body: unknown) {
+    return this.pipeline.setMode(
+      id,
+      (body as { mode: Parameters<PipelineService['setMode']>[1] }).mode,
+    );
   }
 }

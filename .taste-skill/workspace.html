@@ -197,7 +197,6 @@
                         <th>从方</th>
                         <th>关系</th>
                         <th>到方</th>
-                        <th>相对角色</th>
                       </tr>
                     </thead>
                     <tbody id="rels"></tbody>
@@ -275,7 +274,6 @@
       <td>${r.from}<span class="sub">${r.fromRole}</span></td>
       <td style="color:var(--muted)">${r.type}</td>
       <td>${r.to}<span class="sub">${r.toRole}</span></td>
-      <td style="color:var(--faint);font-size:var(--fs-small)">${r.fromRole} → ${r.toRole}</td>
     </tr>`,
         )
         .join('');

@@ -91,6 +91,44 @@ export interface QuestionnaireAnswers {
 
 export const REQUIRED_ANSWER_FIELDS = ['genre', 'length', 'tone', 'pov'] as const;
 
+/** 问卷答案的结构校验（genre/length 为结构性枚举，必须精确匹配） */
+export const QuestionnaireAnswersSchema = z.object({
+  genre: z.enum(GENRES),
+  length: z.enum(LENGTHS),
+  tone: z.string().min(1, '基调不能为空'),
+  pov: z.string().min(1, '叙事视角不能为空'),
+  pacing: z.string().optional(),
+  ending: z.string().optional(),
+  romance: z.string().optional(),
+  orientation: z.string().optional(),
+  idea: z.string().optional(),
+  taboos: z.array(z.string()).optional(),
+  extras: z.record(z.string(), z.string()).optional(),
+});
+
+/** POST /api/novel/projects 请求体 */
+export const CreateProjectSchema = z.object({
+  title: z.string().min(1, '标题不能为空').max(100, '标题过长'),
+  answers: QuestionnaireAnswersSchema,
+  mode: z.enum(PIPELINE_MODES).optional(),
+});
+
+/** POST /api/novel/projects/:id/generate 请求体 */
+export const GenerateBodySchema = z.object({
+  force: z.boolean().optional(),
+  wait: z.boolean().optional(),
+});
+
+/** POST /api/novel/projects/:id/rollback 请求体 */
+export const RollbackBodySchema = z.object({
+  stage: z.enum(STAGES),
+});
+
+/** POST /api/novel/projects/:id/mode 请求体 */
+export const SetModeBodySchema = z.object({
+  mode: z.enum(PIPELINE_MODES),
+});
+
 /**
  * 种子（Premise）产物 schema。
  * 注意：**不含**类型、篇幅、基调、叙事视角——这些由问卷直接决定，不交给模型生成，

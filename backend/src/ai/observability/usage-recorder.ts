@@ -15,7 +15,14 @@ export interface UsageRecord {
   totalTokens: number;
   durationMs: number;
   estimatedCost: number | null;
+  /** 最近一次访问时间，用于过期清理 */
+  lastTouchedAt: number;
 }
+
+/** 记录保留时长：生成结束后日志与写库都在数秒内完成，30 分钟足够宽松 */
+const RECORD_TTL_MS = 30 * 60 * 1000;
+/** 容量上限：超出后按插入顺序淘汰最旧的记录 */
+const MAX_RECORDS = 1000;
 
 interface LangChainLlmOutput {
   llmOutput?: { tokenUsage?: { promptTokens?: number; completionTokens?: number } };
@@ -76,6 +83,9 @@ export class UsageRecorder {
   }
 
   merge(traceId: string, model: string, usage: TokenUsage, durationMs: number): void {
+    const now = Date.now();
+    this.evict(now);
+
     const existing = this.records.get(traceId);
     const record: UsageRecord = existing ?? {
       traceId,
@@ -86,6 +96,7 @@ export class UsageRecorder {
       totalTokens: 0,
       durationMs: 0,
       estimatedCost: null,
+      lastTouchedAt: now,
     };
 
     record.model = model;
@@ -95,12 +106,35 @@ export class UsageRecorder {
     record.totalTokens = record.promptTokens + record.completionTokens;
     record.durationMs += durationMs;
     record.estimatedCost = this.estimateCost(record);
+    record.lastTouchedAt = now;
 
     this.records.set(traceId, record);
   }
 
   get(traceId: string): UsageRecord | undefined {
-    return this.records.get(traceId);
+    const now = Date.now();
+    this.evict(now);
+    const record = this.records.get(traceId);
+    // 读取即续期：生成器可能在生成结束后才来取用量
+    if (record) {
+      record.lastTouchedAt = now;
+    }
+    return record;
+  }
+
+  /** 清理过期记录并淘汰超出容量的最旧记录，防止内存无限增长 */
+  private evict(now: number): void {
+    for (const [key, record] of this.records) {
+      if (now - record.lastTouchedAt > RECORD_TTL_MS) {
+        this.records.delete(key);
+      }
+    }
+    while (this.records.size > MAX_RECORDS) {
+      const oldest = this.records.keys().next();
+      // done 为 true 表示已无记录可淘汰
+      if (oldest.done) break;
+      this.records.delete(oldest.value);
+    }
   }
 
   private estimateCost(record: UsageRecord): number | null {

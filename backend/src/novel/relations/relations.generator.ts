@@ -111,7 +111,22 @@ export class RelationGenerator implements StageGenerator {
       }
 
       const key = `${fromId}|${toId}`;
-      if (result.has(key)) continue;
+      const existing = result.get(key);
+      if (existing) {
+        // 同一对人物完全可能有多重关系（既是仇敌又有利益）。
+        // 保留主关系，把附加信息合并进描述，避免静默丢弃。
+        const description = String(relation.description ?? '');
+        const isNewType = relation.type && relation.type !== existing.type;
+        const addition = [isNewType ? `[${relation.type}]` : '', description]
+          .filter(Boolean)
+          .join(' ');
+        if (addition) {
+          existing.description = existing.description
+            ? `${existing.description}；${addition}`
+            : addition;
+        }
+        continue;
+      }
 
       result.set(key, {
         fromId,

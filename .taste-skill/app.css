@@ -6,7 +6,7 @@
 
 /* ---------- tokens (replace with the dealt style) ---------- */
 :root {
-  /* names match the app sheet printed by draw.mjs --app — style: framed-sheet (seed 312220389) */
+  /* names match the app sheet printed by draw.mjs --app, style: framed-sheet (seed 312220389) */
   --ground: #f9fbfc; /* the dealt frame tint: one low-chroma step of the rill's blue-grey */
   --surface: #ffffff; /* the work sheet */
   --raised: #f4f6f8; /* a filled inner well, hover rows */

@@ -19,9 +19,19 @@ export interface CreateProjectInput {
   mode?: PipelineMode;
 }
 
+/**
+ * 后台生成的总体超时。模型自身有单次请求超时，但图执行级别的挂起
+ * （如连接半开）不会抛错，需要这层兜底把项目从 running 中解救出来。
+ */
+const GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
+
+const TIMEOUT_MARK = Symbol('generation-timeout');
+
 @Injectable()
 export class PipelineService implements OnModuleInit {
   private readonly logger = new Logger(PipelineService.name);
+  /** 可被测试覆盖，以便用极小值验证超时路径 */
+  private readonly generationTimeoutMs: number = GENERATION_TIMEOUT_MS;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -94,7 +104,8 @@ export class PipelineService implements OnModuleInit {
     }
 
     const artifactState = this.assembler.readStageState(project, stage);
-    if (artifactState?.status === 'done' && !options.force) {
+    // 已生效（完成且未失效）的产物不重复生成；失效或未完成则重新生成
+    if (artifactState?.status === 'done' && !artifactState.stale && !options.force) {
       return { stage, status: artifactState.status, started: false };
     }
 
@@ -107,7 +118,7 @@ export class PipelineService implements OnModuleInit {
     await this.setStageStatus(id, stage, 'generating');
     await this.prisma.project.update({ where: { id }, data: { status: 'running' } });
 
-    const task = this.runGeneration(id, stage, generator, context, answers);
+    const task = this.runGenerationWithTimeout(id, stage, generator, context, answers);
     if (options.wait) {
       await task;
     } else {
@@ -125,6 +136,9 @@ export class PipelineService implements OnModuleInit {
     const state = this.assembler.readStageState(project, stage);
     if (!state || state.status !== 'done') {
       throw new BadRequestException('当前阶段产物尚未生成完成，无法确认');
+    }
+    if (state.stale) {
+      throw new BadRequestException('当前阶段产物已失效，请先重新生成后再确认');
     }
 
     const stages = stagesFor(project.genre as QuestionnaireAnswers['genre']);
@@ -195,6 +209,43 @@ export class PipelineService implements OnModuleInit {
     }
     await this.prisma.project.update({ where: { id }, data: { status: 'done' } });
     return this.get(id);
+  }
+
+  /**
+   * 带总体超时的生成执行。超时后主动把阶段与项目标记为失败，
+   * 避免后台任务挂起导致项目永久停在 running（后续操作全被拒绝）。
+   */
+  private async runGenerationWithTimeout(
+    projectId: string,
+    stage: Stage,
+    generator: { generate: (...args: unknown[]) => Promise<unknown> },
+    context: Parameters<typeof generator.generate>[0],
+    answers: QuestionnaireAnswers,
+  ): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<typeof TIMEOUT_MARK>((resolve) => {
+      timer = setTimeout(() => resolve(TIMEOUT_MARK), this.generationTimeoutMs);
+      // 不因定时器未决而阻止进程退出
+      timer.unref?.();
+    });
+
+    try {
+      const outcome = await Promise.race([
+        this.runGeneration(projectId, stage, generator, context, answers).then(
+          () => 'settled' as const,
+        ),
+        timeout,
+      ]);
+
+      if (outcome === TIMEOUT_MARK) {
+        const message = `生成超时（超过 ${Math.round(this.generationTimeoutMs / 60000)} 分钟），已中止并标记失败`;
+        await this.setStageStatus(projectId, stage, 'failed', message);
+        await this.prisma.project.update({ where: { id: projectId }, data: { status: 'failed' } });
+        throw new Error(message);
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private async runGeneration(

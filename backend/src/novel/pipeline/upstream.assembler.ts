@@ -84,14 +84,28 @@ export class UpstreamAssembler {
     return undefined;
   }
 
+  /**
+   * 聚合 1:N 产物的阶段状态。
+   * stale 与 status 是两个独立维度：stale 表示「上游变动后需重新生成」，
+   * status 表示「产物本身的生成结果」，二者不再互相映射。
+   */
   private aggregate(rows: Array<{ status: string; stale: boolean }>): StageState | undefined {
     if (rows.length === 0) return undefined;
     const anyStale = rows.some((row) => row.stale);
     const allDone = rows.every((row) => row.status === 'done');
-    return {
-      status: anyStale ? 'failed' : allDone ? 'done' : 'generating',
-      stale: anyStale,
-    };
+    const anyFailed = rows.some((row) => row.status === 'failed');
+
+    let status: ArtifactStatus;
+    if (allDone) {
+      status = 'done';
+    } else if (anyFailed) {
+      status = 'failed';
+    } else {
+      // 存在 pending 或混合状态：视作仍在推进中
+      status = 'generating';
+    }
+
+    return { status, stale: anyStale };
   }
 
   parseAnswers(answers: string): QuestionnaireAnswers {

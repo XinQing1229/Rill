@@ -63,6 +63,21 @@ describe('创作流水线 API (e2e)', () => {
     ).toBe(true);
   });
 
+  it('未知类型返回 404，非法问卷返回 400 且带字段原因', async () => {
+    await request(app.getHttpServer())
+      .get('/api/novel/questionnaire?genre=not-a-genre')
+      .expect(404);
+
+    const invalid = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({
+        title: 'x',
+        answers: { genre: 'not-a-genre', length: 'short', tone: '热血', pov: '第一人称' },
+      })
+      .expect(400);
+    expect(invalid.body.message).toContain('genre');
+  });
+
   it('创建项目后可按 id 查回，落在首个阶段', async () => {
     const created = await request(app.getHttpServer())
       .post('/api/novel/projects')
