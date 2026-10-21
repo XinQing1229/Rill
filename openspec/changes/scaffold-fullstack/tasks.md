@@ -30,4 +30,4 @@
 
 - [x] 5.1 根脚本联通：`npm run dev` 一键起两端；README 补齐开发者文档（环境要求、配置步骤、命令清单） — verify: 按 README 步骤可从零复现整个启动流程
 - [x] 5.2 端到端验收：浏览器走查「健康状态展示」与「真实 LLM ping」两个主场景 — verify: 两个场景均成功，对应 spec 全部主场景有实证
-- [ ] 5.3 提交全部代码，并轮换此前在对话中明文传输过的 DeepSeek API key — verify: 提交历史不含 `.env`；负责人确认新 key 可用
+- [x] 5.3 提交全部代码，并轮换此前在对话中明文传输过的 DeepSeek API key — verify: 提交历史不含 `.env`；负责人确认新 key 可用
