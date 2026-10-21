@@ -580,9 +580,25 @@
   .menu-toggle {
     display: inline-flex;
   }
+  /* one column: the top bar and the sheet both take it, or the sheet is squeezed into an implicit second column */
+  .topbar {
+    grid-column: 1;
+  }
   .sheet {
     grid-column: 1;
     margin: 0 8px 8px;
+  }
+  /* the builder bar stacks: the name and status on one row, the controls on the next */
+  .builder-bar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 8px 16px;
+  }
+  .builder-bar .divider {
+    display: none;
+  }
+  .builder-bar .right {
+    width: 100%;
   }
   .work {
     grid-template-columns: minmax(0, 1fr);
