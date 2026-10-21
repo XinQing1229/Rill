@@ -1,27 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import { Premise, PremiseSchema, QuestionnaireAnswers, StoryLength } from '@rill/shared';
+import { Premise, PremiseSchema, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service';
 import { PromptRegistry } from '../../ai/prompts/prompt.registry';
 import { UsageRecorder } from '../../ai/observability/usage-recorder';
 import { newTraceId } from '../../ai/observability/trace';
 import { PrismaService } from '../prisma.service';
 import { profileFor } from '../genre/genre-profile';
+import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry';
 import { premiseV1 } from '../prompts/premise-template';
-import { ArtifactRegistry } from './artifact.registry';
 
-const LENGTH_LABEL: Record<StoryLength, string> = {
+const LENGTH_LABEL: Record<string, string> = {
   short: '短篇',
   medium: '中篇',
   long: '长篇',
 };
 
-interface ProjectLike {
-  id: string;
-  answers: string;
-}
-
 @Injectable()
-export class PremiseGenerator {
+export class PremiseGenerator implements StageGenerator {
+  readonly stage: Stage = 'premise';
+  readonly requires = (): Stage[] => [];
+
   constructor(
     private readonly llm: LlmService,
     private readonly prompts: PromptRegistry,
@@ -30,13 +28,17 @@ export class PremiseGenerator {
     private readonly artifacts: ArtifactRegistry,
   ) {
     this.prompts.register(premiseV1);
+    this.artifacts.registerGenerator(this);
     this.artifacts.register('premise', async (projectId, stale) => {
-      await this.prisma.premise.update({ where: { projectId }, data: { stale } });
+      await this.prisma.premise.updateMany({ where: { projectId }, data: { stale } });
     });
   }
 
-  async generate(project: ProjectLike): Promise<Premise> {
-    const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
+  async generate(
+    _context: StageContext,
+    answers: QuestionnaireAnswers,
+    projectId: string,
+  ): Promise<void> {
     const profile = profileFor(answers.genre);
 
     const prompt = this.prompts.render('premise', 'v1', {
@@ -44,7 +46,7 @@ export class PremiseGenerator {
       genreTraits: profile.traits.join('、'),
       tone: answers.tone,
       pov: answers.pov,
-      length: LENGTH_LABEL[answers.length],
+      length: LENGTH_LABEL[answers.length] ?? answers.length,
       idea: answers.idea ?? '',
       taboos: (answers.taboos ?? []).join('、'),
     });
@@ -58,14 +60,29 @@ export class PremiseGenerator {
 
     const usage = this.usageRecorder.get(traceId);
     await this.prisma.premise.update({
-      where: { projectId: project.id },
+      where: { projectId },
       data: {
         data: JSON.stringify(premise),
+        stale: false,
         promptTokens: usage?.promptTokens ?? 0,
         completionTokens: usage?.completionTokens ?? 0,
       },
     });
 
-    return premise;
+    await this.recordProjectUsage(projectId, usage);
+  }
+
+  private async recordProjectUsage(
+    projectId: string,
+    usage: { promptTokens: number; completionTokens: number } | undefined,
+  ): Promise<void> {
+    if (!usage) return;
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        promptTokens: { increment: usage.promptTokens },
+        completionTokens: { increment: usage.completionTokens },
+      },
+    });
   }
 }

@@ -52,6 +52,18 @@ export class NovelController {
     return this.pipeline.rollback(id, body.stage);
   }
 
+  /** 人物列表（含状态） */
+  @Get('projects/:id/characters')
+  characters(@Param('id') id: string) {
+    return this.pipeline.characters(id);
+  }
+
+  /** 关系列表（含双方标识、类型与相对角色） */
+  @Get('projects/:id/relations')
+  relations(@Param('id') id: string) {
+    return this.pipeline.relations(id);
+  }
+
   @Post('projects/:id/mode')
   setMode(@Param('id') id: string, @Body() body: { mode: PipelineMode }) {
     return this.pipeline.setMode(id, body.mode);

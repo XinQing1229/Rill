@@ -1,0 +1,38 @@
+import { PromptTemplate } from '../../ai/prompts/prompt.registry';
+
+/**
+ * 世界观阶段模板。稳定前缀在前，上游产物与档位要求作为变量注入。
+ */
+export const worldV1: PromptTemplate = {
+  name: 'world',
+  version: 'v1',
+  requiredVariables: ['upstream', 'genre', 'genreTraits', 'tier', 'tone'],
+  render(variables: Record<string, string>): string {
+    const tierInstruction =
+      variables.tier === 'light'
+        ? '只需产出「规则」与「势力」，不要产出地理、历史与秘密。'
+        : '请完整产出规则、势力、地理、历史与秘密（秘密可作为后续伏笔素材）。';
+
+    // 内容上限：控制输出体量，避免超出 token 预算导致 JSON 截断，同时让设定更紧凑可用
+    const budgetInstruction =
+      '体量上限（必须遵守）：规则最多 4 条，势力最多 3 个，地理/历史/秘密各最多 2 条；' +
+      '每条描述不超过 60 字，力量体系等自定义块同样保持精炼。宁缺毋滥。';
+
+    return [
+      '你是一位资深的世界观设计师，为小说搭建自洽且有戏剧张力的世界。',
+      '请始终使用简体中文，内容具体、可落地，避免空泛的口号式描述。',
+      '重要：时代与地点已由种子确定，你不要输出它们，也不要与之矛盾。',
+      '',
+      variables.upstream,
+      '',
+      `类型：${variables.genre}`,
+      `类型特征：${variables.genreTraits}`,
+      `基调：${variables.tone}`,
+      '',
+      `产出要求：${tierInstruction}`,
+      budgetInstruction,
+      '',
+      '请输出这个世界的设定。',
+    ].join('\n');
+  },
+};

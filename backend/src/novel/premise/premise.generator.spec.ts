@@ -1,10 +1,10 @@
-import { Premise } from '@rill/shared';
+import { Premise, QuestionnaireAnswers } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service';
 import { PromptRegistry } from '../../ai/prompts/prompt.registry';
 import { AiConfig } from '../../ai/config/ai.config';
 import { UsageRecorder } from '../../ai/observability/usage-recorder';
 import { PrismaService } from '../prisma.service';
-import { ArtifactRegistry } from './artifact.registry';
+import { ArtifactRegistry } from '../pipeline/artifact.registry';
 import { PremiseGenerator } from './premise.generator';
 
 const config: AiConfig = {
@@ -48,33 +48,42 @@ const sample: Premise = {
   taboos: ['血腥描写'],
 };
 
+const answers: QuestionnaireAnswers = {
+  genre: 'xuanyi',
+  length: 'short',
+  tone: '紧张',
+  pov: '第三人称限知',
+  idea: '南宋临安推理',
+};
+
 function setup() {
   const completeStructured = jest.fn();
   const llm = { completeStructured } as unknown as LlmService;
   const prompts = new PromptRegistry();
   const usage = new UsageRecorder(config);
-  const update = jest.fn().mockResolvedValue({});
-  const prisma = { premise: { update } } as unknown as PrismaService;
+  const premiseUpdate = jest.fn().mockResolvedValue({});
+  const projectUpdate = jest.fn().mockResolvedValue({});
+  const prisma = {
+    premise: { update: premiseUpdate },
+    project: { update: projectUpdate },
+  } as unknown as PrismaService;
   const artifacts = new ArtifactRegistry();
   const generator = new PremiseGenerator(llm, prompts, usage, prisma, artifacts);
 
-  return { generator, completeStructured, update, usage, prompts, artifacts };
+  return { generator, completeStructured, premiseUpdate, projectUpdate, usage, prompts, artifacts };
 }
 
-const project = {
-  id: 'project-1',
-  answers: JSON.stringify({
-    genre: 'xuanyi',
-    length: 'short',
-    tone: '紧张',
-    pov: '第三人称限知',
-    idea: '南宋临安推理',
-  }),
-};
-
 describe('PremiseGenerator', () => {
-  it('注册了种子模板与 premise 失效操作', () => {
+  it('声明阶段与上游依赖（无上游）', () => {
+    const { generator } = setup();
+    expect(generator.stage).toBe('premise');
+    expect(generator.requires()).toEqual([]);
+  });
+
+  it('注册种子模板与 premise 失效操作', () => {
     const { generator, prompts, artifacts } = setup();
+    expect(artifacts.has('premise')).toBe(true);
+    expect(artifacts.getGenerator('premise')).toBe(generator);
     expect(() =>
       prompts.render('premise', 'v1', {
         genre: '悬疑',
@@ -84,12 +93,10 @@ describe('PremiseGenerator', () => {
         length: '短篇',
       }),
     ).not.toThrow();
-    expect(artifacts.has('premise')).toBe(true);
-    expect(generator).toBeDefined();
   });
 
   it('生成成功时写入产物数据并记录用量', async () => {
-    const { generator, completeStructured, update, usage } = setup();
+    const { generator, completeStructured, premiseUpdate, usage } = setup();
     let capturedTraceId = '';
     completeStructured.mockImplementation(
       async (_schema, _messages, options?: { traceId?: string }) => {
@@ -101,28 +108,26 @@ describe('PremiseGenerator', () => {
       },
     );
 
-    const result = await generator.generate(project);
+    await generator.generate({}, answers, 'project-1');
 
-    expect(result.title).toBe('临安十二时');
-    expect(update).toHaveBeenCalledWith(
+    expect(premiseUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { projectId: 'project-1' },
         data: expect.objectContaining({
+          stale: false,
           promptTokens: 120,
           completionTokens: 80,
         }),
       }),
     );
-    // 写入的产物内容可反序列化回种子结构
-    const written = JSON.parse(update.mock.calls[0][0].data.data);
-    expect(written.protagonist.name).toBe('沈砚');
+    expect(JSON.parse(premiseUpdate.mock.calls[0][0].data.data).title).toBe('临安十二时');
   });
 
   it('提示词注入问卷答案（类型、基调、视角、创意）', async () => {
     const { generator, completeStructured } = setup();
     completeStructured.mockResolvedValue(sample);
 
-    await generator.generate(project);
+    await generator.generate({}, answers, 'project-1');
 
     const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
     const prompt = messages[0].content;
@@ -136,12 +141,17 @@ describe('PremiseGenerator', () => {
     const { generator, completeStructured } = setup();
     completeStructured.mockResolvedValue(sample);
 
-    await generator.generate({
-      id: 'project-2',
-      answers: JSON.stringify({ genre: 'xuanyi', length: 'short', tone: '紧张', pov: '第一人称' }),
-    });
+    await generator.generate({}, { ...answers, idea: undefined }, 'project-2');
 
     const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
     expect(messages[0].content).toContain('自行构思');
+  });
+
+  it('生成失败时不写入产物', async () => {
+    const { generator, completeStructured, premiseUpdate } = setup();
+    completeStructured.mockRejectedValue(new Error('调用失败'));
+
+    await expect(generator.generate({}, answers, 'project-1')).rejects.toThrow('调用失败');
+    expect(premiseUpdate).not.toHaveBeenCalled();
   });
 });

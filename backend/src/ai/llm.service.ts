@@ -116,6 +116,7 @@ export class LlmService implements OnModuleInit {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             runnable.invoke(currentMessages as any, {
               callbacks: [this.usage.callbacks(traceId, resolved.modelName)],
+              ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
             }),
           );
           return result as T;

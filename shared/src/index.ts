@@ -51,7 +51,15 @@ export const POVS = ['第一人称', '第三人称限知', '第三人称全知']
 export const PIPELINE_MODES = ['manual', 'auto'] as const;
 export type PipelineMode = (typeof PIPELINE_MODES)[number];
 
-export const STAGES = ['premise', 'world', 'characters', 'outline', 'beats', 'prose'] as const;
+export const STAGES = [
+  'premise',
+  'world',
+  'characters',
+  'relations',
+  'outline',
+  'beats',
+  'prose',
+] as const;
 export type Stage = (typeof STAGES)[number];
 
 export const ARTIFACT_STATUS = ['pending', 'generating', 'done', 'failed'] as const;
@@ -113,3 +121,154 @@ export const PremiseSchema = z.object({
 });
 
 export type Premise = z.infer<typeof PremiseSchema>;
+
+// ---------------- 世界观与人物 ----------------
+
+/** 世界观通用骨架（所有类型共享）；geography/history/secrets 仅「详细」档产出 */
+export const GenericWorldSchema = z.object({
+  summary: z.string().describe('世界观概述，两三句话'),
+  rules: z
+    .array(
+      z.object({
+        name: z.string().describe('规则名称'),
+        description: z.string().describe('规则内容与约束'),
+      }),
+    )
+    .describe('世界规则与约束'),
+  factions: z
+    .array(
+      z.object({
+        name: z.string().describe('势力名称'),
+        nature: z.string().describe('性质：门派/家族/官府/组织/其他'),
+        stance: z.string().describe('立场与目的'),
+      }),
+    )
+    .describe('势力'),
+  geography: z
+    .array(z.object({ name: z.string(), description: z.string() }))
+    .optional()
+    .describe('地理（仅详细档产出）'),
+  history: z
+    .array(z.object({ event: z.string(), impact: z.string() }))
+    .optional()
+    .describe('历史事件（仅详细档产出）'),
+  secrets: z
+    .array(
+      z.object({
+        secret: z.string().describe('未公开的秘密'),
+        relatedTo: z.string().describe('与哪些人物或势力相关，可作为伏笔素材'),
+      }),
+    )
+    .optional()
+    .describe('未公开的秘密（伏笔素材）'),
+});
+
+/** 类型自定义块：玄幻 */
+export const XuanhuanWorldSchema = z.object({
+  powerSystem: z.object({
+    realms: z.array(z.string()).describe('境界或等级划分'),
+    resources: z.string().describe('核心资源'),
+    cost: z.string().describe('修炼代价或限制'),
+  }),
+});
+
+/** 类型自定义块：科幻 */
+export const KehuanWorldSchema = z.object({
+  techTree: z.object({
+    keyTech: z.array(z.string()).describe('关键技术'),
+    socialImpact: z.string().describe('科技对社会结构的影响'),
+    limits: z.string().describe('技术边界或禁忌'),
+  }),
+});
+
+/** 类型自定义块：历史 */
+export const LishiWorldSchema = z.object({
+  institutions: z.object({
+    government: z.string().describe('官制与权力结构'),
+    military: z.string().describe('军制'),
+    customs: z.string().describe('礼法与社会风俗'),
+  }),
+});
+
+/** 类型自定义块：悬疑 */
+export const XuanyiWorldSchema = z.object({
+  mysteryRules: z.object({
+    methodBoundary: z.string().describe('作案手法的可行边界'),
+    revealRhythm: z.string().describe('线索揭示的节奏与规则'),
+  }),
+});
+
+/** 类型自定义块：都市 */
+export const DushiWorldSchema = z.object({
+  industry: z.object({
+    field: z.string().describe('核心行业'),
+    rules: z.string().describe('行业规则与潜规则'),
+  }),
+});
+
+/** 类型自定义块：言情 */
+export const YanqingWorldSchema = z.object({
+  relationSetting: z.object({
+    bond: z.string().describe('两人关系的起点设定'),
+    obstacle: z.string().describe('关系的主要障碍'),
+  }),
+});
+
+export const CUSTOM_WORLD_SCHEMAS = {
+  xuanhuan: XuanhuanWorldSchema,
+  kehuan: KehuanWorldSchema,
+  lishi: LishiWorldSchema,
+  xuanyi: XuanyiWorldSchema,
+  dushi: DushiWorldSchema,
+  yanqing: YanqingWorldSchema,
+} as const;
+
+export type WorldGenre = keyof typeof CUSTOM_WORLD_SCHEMAS;
+
+/** 按类型合并出完整的世界观 schema（通用骨架 + 自定义块） */
+export function worldSchemaFor(genre: string) {
+  const custom = CUSTOM_WORLD_SCHEMAS[genre as WorldGenre];
+  return z.object({ ...GenericWorldSchema.shape, ...(custom ? custom.shape : {}) });
+}
+
+/** 人物卡 */
+export const CharacterSchema = z.object({
+  name: z.string().describe('姓名'),
+  role: z.enum(['protagonist', 'supporting', 'antagonist']).describe('角色定位'),
+  identity: z.string().describe('身份'),
+  desire: z.string().describe('最想要什么'),
+  flaw: z.string().describe('缺陷或软肋'),
+  personality: z.string().describe('性格'),
+  background: z.string().describe('背景经历'),
+  abilities: z.string().describe('能力或手段'),
+  arc: z.string().describe('人物弧光：从什么状态变成什么状态'),
+});
+
+export const CharacterListSchema = z.object({
+  characters: z.array(CharacterSchema).describe('人物列表，第一个必须是主角'),
+});
+
+export type Character = z.infer<typeof CharacterSchema>;
+
+/** 人物关系（模型侧用姓名引用人物，入库时转换为 id） */
+export const RelationSchema = z.object({
+  fromName: z.string().describe('关系一方的姓名'),
+  toName: z.string().describe('关系另一方的姓名'),
+  type: z.string().describe('关系类型：师徒/仇敌/亲人/利益/爱慕/其他'),
+  fromRole: z.string().describe('前者相对后者的角色，如「师父」'),
+  toRole: z.string().describe('后者相对前者的角色，如「徒弟」'),
+  description: z.string().describe('关系描述'),
+});
+
+export const RelationListSchema = z.object({
+  relations: z.array(RelationSchema).describe('关系列表，同一对人物只描述一次'),
+});
+
+export type Relation = z.infer<typeof RelationSchema>;
+
+/** 上游产物装配后的阶段上下文（只含已确认且未失效的产物） */
+export interface StageContext {
+  premise?: Premise;
+  world?: Record<string, unknown>;
+  characters?: Character[];
+}

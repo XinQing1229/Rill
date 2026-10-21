@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>青川令 · 工作台 · Rill</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="pages.css" />
+  </head>
+  <body>
+    <div class="frame">
+      <aside class="sidebar">
+        <div class="brand">
+          <svg class="mark" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path
+              d="M2 5c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2"
+              stroke="#1b6c80"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <path
+              d="M2 9c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2"
+              stroke="#1b6c80"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              opacity=".55"
+            />
+            <path
+              d="M2 13c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2"
+              stroke="#1b6c80"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              opacity=".3"
+            />
+          </svg>
+          <span class="word">Rill<small>小说创作</small></span>
+        </div>
+        <div class="group-label">创作</div>
+        <a class="nav-item" href="list.html">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M2.5 3.5h11v9h-11z" />
+            <path d="M5 6.5h6M5 9h4" />
+          </svg>
+          项目<span class="count">3</span>
+        </a>
+        <a class="nav-item" href="new.html">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          >
+            <path d="M8 3.5v9M3.5 8h9" />
+          </svg>
+          新建项目
+        </a>
+        <div class="bottom">
+          <a class="nav-item" href="#"
+            ><svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            >
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M6.6 6.4a1.5 1.5 0 1 1 2.3 1.3c-.5.3-.9.7-.9 1.3" />
+              <circle cx="8" cy="11.4" r=".4" fill="currentColor" /></svg
+            >帮助</a
+          >
+          <a class="nav-item" href="#"
+            ><svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            >
+              <circle cx="8" cy="8" r="2.2" />
+              <path d="M8 2.5v1.6M8 11.9v1.6M2.5 8h1.6M11.9 8h1.6" /></svg
+            >设置</a
+          >
+        </div>
+      </aside>
+
+      <header class="topbar">
+        <button class="icon-btn menu-toggle" aria-label="打开菜单">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          >
+            <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+          </svg>
+        </button>
+        <div class="search">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          >
+            <circle cx="6.2" cy="6.2" r="4.2" />
+            <path d="m9.6 9.6 2.4 2.4" />
+          </svg>
+          搜索项目<kbd>⌘K</kbd>
+        </div>
+        <div class="right">
+          <span class="stamp">本地模式</span>
+          <span class="who">偃</span>
+        </div>
+      </header>
+
+      <main class="sheet">
+        <!-- builder bar: the object's name and status, then the one primary action -->
+        <div class="builder-bar">
+          <a class="back" href="list.html" aria-label="返回项目">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M9.5 3.5 5 8l4.5 4.5" />
+            </svg>
+          </a>
+          <h1 class="name">青川令</h1>
+          <span class="pill warn">待确认</span>
+          <div class="right">
+            <div class="segmented" role="group" aria-label="推进模式">
+              <button aria-pressed="true">手动</button>
+              <button aria-pressed="false">自动</button>
+            </div>
+            <span class="divider"></span>
+            <button class="btn">重新生成</button>
+            <button class="btn primary">确认并推进</button>
+          </div>
+        </div>
+
+        <div class="work">
+          <!-- stage spine: the pipeline as the product's signature element -->
+          <div class="spine" id="spine"></div>
+
+          <!-- canvas: a flat well, one step darker than the sheet -->
+          <div class="canvas-well">
+            <div class="node">
+              <header>
+                <h2>
+                  人物 <span class="num" style="font-weight: 400; color: var(--faint)">8 位</span>
+                </h2>
+                <div class="actions">
+                  <button class="btn ghost" style="color: var(--muted)">重新生成人物</button>
+                </div>
+              </header>
+              <div class="node-sub">
+                主角已从种子扩展 · 生成于 今天 14:31 ·
+                <span style="font-family: var(--mono)">2,905 in / 4,512 out</span>
+              </div>
+              <div class="cast" id="cast"></div>
+
+              <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rule)">
+                <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px">
+                  <h3 style="font-size: var(--fs-body); font-weight: 600">关系网</h3>
+                  <span style="font-size: var(--fs-small); color: var(--faint)"
+                    >6 条 · 与人物一同重新生成</span
+                  >
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>从方</th>
+                        <th>关系</th>
+                        <th>到方</th>
+                        <th>相对角色</th>
+                      </tr>
+                    </thead>
+                    <tbody id="rels"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="data.js"></script>
+    <script>
+      const fmt = (n) => n.toLocaleString('en-US');
+      const stages = [
+        { key: 'premise', name: '种子', state: 'done', sub: '已完成', tokens: RILL.usage.premise },
+        { key: 'world', name: '世界观', state: 'done', sub: '已完成', tokens: RILL.usage.world },
+        {
+          key: 'characters',
+          name: '人物',
+          state: 'current',
+          sub: '待确认',
+          tokens: RILL.usage.characters,
+        },
+      ];
+      let html = '';
+      stages.forEach((s, i) => {
+        html += `<div class="stage ${s.state}">
+      <span class="dot"></span>
+      <div class="st-key">${s.key}</div>
+      <div class="st-name">${s.name}</div>
+      <div class="st-sub">${s.state === 'current' ? '<span class="pill warn">待确认</span>' : s.sub}</div>
+      <div class="st-tokens">${fmt(s.tokens.in)} in · ${fmt(s.tokens.out)} out</div>
+    </div>`;
+        if (i === stages.length - 1) {
+          html += `<div class="stage-advance">
+        <button class="insert primary" aria-label="确认并推进下一阶段" title="确认并推进">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2.5v9M3.5 8 7 11.5 10.5 8"/></svg>
+        </button>
+        <span class="insert-label">确认并推进下一阶段</span>
+      </div>`;
+        }
+      });
+      html += `<div class="stage" style="padding-top:8px">
+      <span class="dot" style="border-style:dashed"></span>
+      <div class="st-key">outline → prose</div>
+      <div class="st-name" style="color:var(--faint)">后续阶段</div>
+      <div class="st-sub">大纲 · 细纲 · 正文，即将开放</div>
+    </div>`;
+      document.getElementById('spine').innerHTML = html;
+
+      document.getElementById('cast').innerHTML = RILL.characters
+        .map(
+          (c, i) => `
+    <div class="who ${i === 0 ? 'lead' : ''}">
+      <header><h3>${c.name}</h3><span class="role">${c.role}${i === 0 ? ' · 主角' : ''}</span></header>
+      <dl class="kv">
+        <dt>身份</dt><dd>${c.identity}</dd>
+        <dt>渴望</dt><dd>${c.desire}</dd>
+        <dt>缺陷</dt><dd>${c.flaw}</dd>
+        <dt>性格</dt><dd>${c.personality}</dd>
+        <dt>背景</dt><dd>${c.background}</dd>
+        <dt>能力</dt><dd>${c.abilities}</dd>
+        <dt class="wide">弧线</dt><dd class="wide">${c.arc}</dd>
+      </dl>
+    </div>`,
+        )
+        .join('');
+
+      document.getElementById('rels').innerHTML = RILL.relations
+        .map(
+          (r) => `
+    <tr>
+      <td>${r.from}<span class="sub">${r.fromRole}</span></td>
+      <td style="color:var(--muted)">${r.type}</td>
+      <td>${r.to}<span class="sub">${r.toRole}</span></td>
+      <td style="color:var(--faint);font-size:var(--fs-small)">${r.fromRole} → ${r.toRole}</td>
+    </tr>`,
+        )
+        .join('');
+
+      document
+        .querySelector('.menu-toggle')
+        ?.addEventListener('click', () =>
+          document.querySelector('.sidebar').classList.toggle('open'),
+        );
+      document.querySelectorAll('.segmented button').forEach((b) =>
+        b.addEventListener('click', () => {
+          document
+            .querySelectorAll('.segmented button')
+            .forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        }),
+      );
+    </script>
+  </body>
+</html>

@@ -27,6 +27,9 @@ model Project {
   updatedAt            DateTime @updatedAt
 
   premise Premise?
+  world WorldSetting?
+  characters Character[]
+  relations Relation[]
 }
 
 model Premise {
@@ -42,4 +45,66 @@ model Premise {
   error            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model WorldSetting {
+  id               String   @id @default(cuid())
+  projectId        String   @unique
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // 通用骨架 + 类型自定义块（JSON 字符串）；era/place 由种子继承后填入
+  data             String
+  status           String   @default("pending")
+  stale            Boolean  @default(false)
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  error            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Character {
+  id               String   @id @default(cuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name             String
+  role             String // protagonist | supporting | antagonist
+  // 完整人物卡（JSON 字符串）
+  data             String
+  status           String   @default("pending")
+  stale            Boolean  @default(false)
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  error            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  relationsFrom Relation[] @relation("RelationFrom")
+  relationsTo   Relation[] @relation("RelationTo")
+
+  @@index([projectId])
+}
+
+model Relation {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // 规范化：fromId 恒小于 toId，同一对人物只存一条；方向性由 fromRole/toRole 表达
+  fromId      String
+  toId        String
+  from        Character @relation("RelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to          Character @relation("RelationTo", fields: [toId], references: [id], onDelete: Cascade)
+  type        String
+  fromRole    String
+  toRole      String
+  description String
+  status      String    @default("pending")
+  stale       Boolean   @default(false)
+  promptTokens Int      @default(0)
+  completionTokens Int  @default(0)
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([projectId, fromId, toId])
+  @@index([projectId])
 }

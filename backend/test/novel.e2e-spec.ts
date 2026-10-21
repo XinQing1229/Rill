@@ -123,4 +123,68 @@ describe('创作流水线 API (e2e)', () => {
     expect(response.body.started).toBe(true);
     expect(elapsed).toBeLessThan(1000);
   });
+
+  it('人物与关系查询接口返回数据', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ title: '查询测试', answers })
+      .expect(201);
+    const id = created.body.id;
+
+    await prisma.character.createMany({
+      data: [
+        { projectId: id, name: '沈砚秋', role: 'protagonist', data: '{}', status: 'done' },
+        { projectId: id, name: '沈九', role: 'supporting', data: '{}', status: 'done' },
+      ],
+    });
+    const characters = await prisma.character.findMany({ where: { projectId: id } });
+    await prisma.relation.create({
+      data: {
+        projectId: id,
+        fromId: characters[0].id,
+        toId: characters[1].id,
+        type: '亲人',
+        fromRole: '女儿',
+        toRole: '父亲',
+        description: '父女',
+        status: 'done',
+      },
+    });
+
+    const characterList = await request(app.getHttpServer())
+      .get(`/api/novel/projects/${id}/characters`)
+      .expect(200);
+    expect(characterList.body).toHaveLength(2);
+    expect(characterList.body[0].name).toBe('沈砚秋');
+
+    const relationList = await request(app.getHttpServer())
+      .get(`/api/novel/projects/${id}/relations`)
+      .expect(200);
+    expect(relationList.body).toHaveLength(1);
+    expect(relationList.body[0].fromRole).toBe('女儿');
+    expect(relationList.body[0].toRole).toBe('父亲');
+  });
+
+  it('确认后阶段推进到 world 且生成接口可达', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ title: '阶段测试', answers })
+      .expect(201);
+    const id = created.body.id;
+
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/generate`)
+      .send({ wait: true })
+      .expect(201);
+    await request(app.getHttpServer()).post(`/api/novel/projects/${id}/confirm`).expect(201);
+
+    const project = await request(app.getHttpServer()).get(`/api/novel/projects/${id}`).expect(200);
+    expect(project.body.currentStage).toBe('world');
+
+    // world 生成器已注册：接口应受理（mock 返回不合结构，最终以失败告终，但不再是「尚未实现」）
+    const response = await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/generate`)
+      .send({ wait: true });
+    expect(response.body.message ?? '').not.toContain('尚未实现');
+  });
 });

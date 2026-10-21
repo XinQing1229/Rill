@@ -14,6 +14,10 @@ export interface GenreProfile {
   skipStages: Stage[];
   /** 建议规模（按篇幅） */
   suggestedChapters: Record<StoryLength, number>;
+  /** 建议人物数量（按篇幅，可被问卷选答覆盖） */
+  characterCount: Record<StoryLength, number>;
+  /** 世界观生成的输出 token 预算（详细档内容多，需要更大预算） */
+  worldMaxTokens: number;
   suggestedWordsPerChapter: number;
   /** 注入提示词的类型特征 */
   traits: string[];
@@ -22,6 +26,7 @@ export interface GenreProfile {
 }
 
 const CHAPTERS: Record<StoryLength, number> = { short: 8, medium: 40, long: 200 };
+const CHARACTERS: Record<StoryLength, number> = { short: 4, medium: 8, long: 16 };
 
 export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
   xuanhuan: {
@@ -29,6 +34,8 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldWeight: 'detailed',
     skipStages: [],
     suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 6144,
     suggestedWordsPerChapter: 2500,
     traits: ['力量体系分明', '升级节奏清晰', '世界观宏大'],
     extraQuestions: [
@@ -41,6 +48,8 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldWeight: 'minimal',
     skipStages: ['world'],
     suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 2048,
     suggestedWordsPerChapter: 2200,
     traits: ['贴近现实', '人际冲突驱动', '职业细节真实'],
     extraQuestions: [
@@ -52,6 +61,8 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldWeight: 'light',
     skipStages: [],
     suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 2048,
     suggestedWordsPerChapter: 2500,
     traits: ['线索层层递进', '反转要有铺垫', '节奏紧凑'],
     extraQuestions: [
@@ -64,6 +75,8 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldWeight: 'detailed',
     skipStages: [],
     suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 6144,
     suggestedWordsPerChapter: 2600,
     traits: ['考据严谨', '时代矛盾鲜明', '人物命运与历史交织'],
     extraQuestions: [
@@ -75,6 +88,8 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldWeight: 'detailed',
     skipStages: [],
     suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 6144,
     suggestedWordsPerChapter: 2500,
     traits: ['设定自洽', '科技与社会互塑', '概念有惊喜'],
     extraQuestions: [
@@ -86,6 +101,8 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldWeight: 'minimal',
     skipStages: ['world'],
     suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 2048,
     suggestedWordsPerChapter: 2000,
     traits: ['情感推进清晰', '关系张力足', '细节有温度'],
     extraQuestions: [
@@ -97,13 +114,23 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldWeight: 'light',
     skipStages: [],
     suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 2048,
     suggestedWordsPerChapter: 2200,
     traits: ['类型特征由作者补充说明'],
     extraQuestions: [],
   },
 };
 
-const ALL_STAGES: Stage[] = ['premise', 'world', 'characters', 'outline', 'beats', 'prose'];
+const ALL_STAGES: Stage[] = [
+  'premise',
+  'world',
+  'characters',
+  'relations',
+  'outline',
+  'beats',
+  'prose',
+];
 
 /** 阶段列表 = 完整流程 − 该类型声明跳过的阶段 */
 export function stagesFor(genre: Genre): Stage[] {

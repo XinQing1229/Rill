@@ -55,6 +55,18 @@ export class QuestionnaireService {
       },
     ];
 
+    // 选答：人物规模（默认按篇幅配置，可在此覆盖）
+    questions.push({
+      key: 'extras.characterScale',
+      label: '人物规模',
+      required: false,
+      options: [
+        { value: 'compact', label: '精简' },
+        { value: 'standard', label: '标准' },
+        { value: 'rich', label: '丰满' },
+      ],
+    });
+
     // 类型特有的选答项（级联）
     for (const extra of profile.extraQuestions) {
       questions.push({

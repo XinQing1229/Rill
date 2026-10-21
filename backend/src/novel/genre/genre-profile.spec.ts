@@ -14,11 +14,12 @@ describe('genre profile', () => {
     }
   });
 
-  it('短篇默认阶段顺序正确', () => {
+  it('短篇默认阶段顺序正确（含 relations）', () => {
     expect(stagesFor('xuanhuan')).toEqual([
       'premise',
       'world',
       'characters',
+      'relations',
       'outline',
       'beats',
       'prose',
