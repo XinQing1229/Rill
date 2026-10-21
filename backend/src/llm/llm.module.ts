@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
+import { AiModule } from '../ai/ai.module';
 import { LlmController } from './llm.controller';
-import { LlmService } from './llm.service';
 
 @Module({
+  imports: [AiModule],
   controllers: [LlmController],
-  providers: [LlmService],
-  exports: [LlmService],
 })
 export class LlmModule {}
