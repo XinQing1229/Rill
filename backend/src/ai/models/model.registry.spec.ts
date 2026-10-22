@@ -79,6 +79,17 @@ describe('ModelRegistry', () => {
     expect(resolved.thinking).toBe(false);
   });
 
+  it('overrides.maxTokens 覆盖用途默认输出上限', () => {
+    const registry = new ModelRegistry(config);
+    // 未传时用用途默认值
+    expect(registry.resolve('draft').maxTokens).toBe(2048);
+    // 传入时覆盖（大纲生成用 OUTLINE_MAX_TOKENS 提升输出预算）
+    expect(registry.resolve('draft', { maxTokens: 8192 }).maxTokens).toBe(8192);
+    expect(buildChatModelOptions(config, config.usages.draft, { maxTokens: 8192 }).maxTokens).toBe(
+      8192,
+    );
+  });
+
   it('未配置密钥时使用占位值，不影响构造', () => {
     const registry = new ModelRegistry({ ...config, apiKey: '' });
     expect(() => registry.resolve('draft')).not.toThrow();

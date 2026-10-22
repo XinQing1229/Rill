@@ -104,7 +104,11 @@ export class LlmService implements OnModuleInit {
   ): Promise<T> {
     const traceId = options.traceId ?? newTraceId();
     const usageKind: ModelUsage = options.usage ?? 'draft';
-    const resolved = this.registry.resolve(usageKind, { thinking: false });
+    // maxTokens 必须落在模型构造参数上：invoke 选项中的 maxTokens 会被 ChatDeepSeek 忽略
+    const resolved = this.registry.resolve(usageKind, {
+      thinking: false,
+      ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
+    });
     const runnable = resolved.model.withStructuredOutput(schema);
 
     const maxRepairAttempts = options.maxRepairAttempts ?? this.config.structured.maxRepairAttempts;
@@ -119,7 +123,6 @@ export class LlmService implements OnModuleInit {
             runnable.invoke(currentMessages as any, {
               signal: options.signal ?? executionContext.getStore()?.signal,
               callbacks: [this.usage.callbacks(traceId, resolved.modelName)],
-              ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
             }),
           );
           return result as T;

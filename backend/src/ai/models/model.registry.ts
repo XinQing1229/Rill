@@ -21,6 +21,12 @@ export interface ChatModelOptions {
   modelKwargs: { thinking: { type: 'enabled' | 'disabled' } };
 }
 
+/** 调用级覆盖：思维链开关与单次输出上限（maxTokens 必须落在构造参数上，invoke 选项会被 SDK 忽略） */
+export interface ResolveOverrides {
+  thinking?: boolean;
+  maxTokens?: number;
+}
+
 /**
  * 构造模型参数。思维链开关**永远显式指定**——
  * 实测表明不传该参数时模型行为不确定（同一模型出现过一次推理、一次不推理）。
@@ -28,7 +34,7 @@ export interface ChatModelOptions {
 export function buildChatModelOptions(
   config: AiConfig,
   usageConfig: UsageConfig,
-  overrides: { thinking?: boolean } = {},
+  overrides: ResolveOverrides = {},
 ): ChatModelOptions {
   const thinking = overrides.thinking ?? usageConfig.thinking;
   return {
@@ -36,7 +42,7 @@ export function buildChatModelOptions(
     configuration: { baseURL: config.baseUrl },
     model: usageConfig.model,
     temperature: usageConfig.temperature,
-    maxTokens: usageConfig.maxTokens,
+    maxTokens: overrides.maxTokens ?? usageConfig.maxTokens,
     timeout: usageConfig.timeout,
     modelKwargs: { thinking: { type: thinking ? 'enabled' : 'disabled' } },
   };
@@ -47,9 +53,10 @@ export class ModelRegistry {
   constructor(@Inject(AI_CONFIG) private readonly config: AiConfig) {}
 
   /**
-   * 按用途解析模型。overrides.thinking 用于结构化生成强制关闭思维链。
+   * 按用途解析模型。overrides.thinking 用于结构化生成强制关闭思维链；
+   * overrides.maxTokens 用于调用级输出上限（如大纲生成的 OUTLINE_MAX_TOKENS）。
    */
-  resolve(usage: ModelUsage, overrides: { thinking?: boolean } = {}): ResolvedModel {
+  resolve(usage: ModelUsage, overrides: ResolveOverrides = {}): ResolvedModel {
     const usageConfig = this.config.usages[usage];
     const options = buildChatModelOptions(this.config, usageConfig, overrides);
     const thinking = overrides.thinking ?? usageConfig.thinking;
@@ -59,7 +66,7 @@ export class ModelRegistry {
       modelName: usageConfig.model,
       thinking,
       temperature: usageConfig.temperature,
-      maxTokens: usageConfig.maxTokens,
+      maxTokens: overrides.maxTokens ?? usageConfig.maxTokens,
       timeoutMs: usageConfig.timeout,
     };
   }

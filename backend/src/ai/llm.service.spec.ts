@@ -149,6 +149,20 @@ describe('LlmService.completeStructured', () => {
     expect(registry.resolve).toHaveBeenCalledWith('reasoning', { thinking: false });
   });
 
+  it('maxTokens 透传到模型构造参数（invoke 选项会被 SDK 忽略）', async () => {
+    const { service, registry, structuredInvoke } = setup();
+    structuredInvoke.mockResolvedValue({ title: 't', summary: 's', tags: ['a'] });
+
+    await service.completeStructured(SampleBookSchema, [{ role: 'user', content: 'x' }], {
+      maxTokens: 8192,
+    });
+
+    expect(registry.resolve).toHaveBeenCalledWith('draft', {
+      thinking: false,
+      maxTokens: 8192,
+    });
+  });
+
   it('校验失败时回喂错误重试，第二次成功', async () => {
     const { service, structuredInvoke } = setup();
     const parseError = Object.assign(new Error('输出不是合法 JSON'), {
