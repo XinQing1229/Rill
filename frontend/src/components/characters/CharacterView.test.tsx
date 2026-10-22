@@ -5,7 +5,10 @@ import { makeCharacterRow } from '../../test/fixtures';
 
 describe('CharacterView', () => {
   it('人物卡展示契约字段且主角置顶标识', () => {
-    const rows = [makeCharacterRow('沈青偃', 'protagonist'), makeCharacterRow('裴烈', 'supporting')];
+    const rows = [
+      makeCharacterRow('沈青偃', 'protagonist'),
+      makeCharacterRow('裴烈', 'supporting'),
+    ];
     const { container } = render(<CharacterView rows={rows} />);
     expect(screen.getByText('沈青偃')).toBeInTheDocument();
     expect(screen.getByText('裴烈')).toBeInTheDocument();

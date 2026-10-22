@@ -29,7 +29,11 @@ describe('WorldView', () => {
   });
 
   it('没有自定义块的类型降级为提示', () => {
-    const generic = { summary: worldData.summary, rules: worldData.rules, factions: worldData.factions };
+    const generic = {
+      summary: worldData.summary,
+      rules: worldData.rules,
+      factions: worldData.factions,
+    };
     render(<WorldView world={generic} genre="other" />);
     expect(screen.getByText('该类型没有自定义世界观块')).toBeInTheDocument();
   });

@@ -98,9 +98,11 @@ export function NewProjectPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const { data: questionnaire, loading, error: questionnaireError } = useQuestionnaire(
-    genre ?? undefined,
-  );
+  const {
+    data: questionnaire,
+    loading,
+    error: questionnaireError,
+  } = useQuestionnaire(genre ?? undefined);
 
   const bodyQuestions = useMemo(
     () => (questionnaire?.questions ?? []).filter((q) => q.key !== 'genre'),
@@ -178,8 +180,15 @@ export function NewProjectPage() {
               '类型决定阶段列表与问卷的级联问题'
             ) : (
               <>
-                已选类型：<b style={{ color: 'var(--text)', fontWeight: 500 }}>{genre && GENRE_LABELS[genre]}</b>（
-                <a onClick={() => setStep(1)} style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                已选类型：
+                <b style={{ color: 'var(--text)', fontWeight: 500 }}>
+                  {genre && GENRE_LABELS[genre]}
+                </b>
+                （
+                <a
+                  onClick={() => setStep(1)}
+                  style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}
+                >
                   返回更改
                 </a>
                 ）
@@ -326,7 +335,11 @@ function SummaryRow({ question, value }: { question: Question; value: string | u
     <>
       <dt>{question.label}</dt>
       <dd>
-        {value ? (question.options.find((o) => o.value === value)?.label ?? value) : <span style={{ color: 'var(--faint)' }}>未回答</span>}
+        {value ? (
+          (question.options.find((o) => o.value === value)?.label ?? value)
+        ) : (
+          <span style={{ color: 'var(--faint)' }}>未回答</span>
+        )}
       </dd>
     </>
   );

@@ -29,10 +29,9 @@ describe('useQuestionnaire 级联', () => {
 
   it('切换类型时清空旧结构并重新请求', async () => {
     mockGetQuestionnaire.mockResolvedValue(questionnaireFixture);
-    const { result, rerender } = renderHook(
-      ({ genre }) => useQuestionnaire(genre),
-      { initialProps: { genre: 'xuanhuan' as Genre | undefined } },
-    );
+    const { result, rerender } = renderHook(({ genre }) => useQuestionnaire(genre), {
+      initialProps: { genre: 'xuanhuan' as Genre | undefined },
+    });
     await waitFor(() => expect(result.current.data).not.toBeNull());
 
     mockGetQuestionnaire.mockClear();

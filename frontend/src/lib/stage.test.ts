@@ -74,7 +74,10 @@ describe('upstreamRequires（与后端生成器 requires() 一致）', () => {
 describe('firstUnreadyUpstream', () => {
   it('上游缺失时阻止', () => {
     const project = makeProject(); // premise pending
-    expect(firstUnreadyUpstream(project, 'world')).toEqual({ stage: 'premise', reason: 'not-done' });
+    expect(firstUnreadyUpstream(project, 'world')).toEqual({
+      stage: 'premise',
+      reason: 'not-done',
+    });
   });
 
   it('上游失效时阻止', () => {

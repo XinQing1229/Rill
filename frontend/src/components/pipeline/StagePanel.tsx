@@ -27,7 +27,10 @@ import { StageStatePill } from './StageTimeline';
 type ParseResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 /** 产物数据按 shared schema 校验后解析；坏数据展示错误而不崩溃 */
-function parseData<T>(schema: ZodType<T>, row: { data: string } | null | undefined): ParseResult<T> | null {
+function parseData<T>(
+  schema: ZodType<T>,
+  row: { data: string } | null | undefined,
+): ParseResult<T> | null {
   if (!row) return null;
   try {
     const parsed = schema.safeParse(JSON.parse(row.data));
@@ -82,7 +85,9 @@ export function StagePanel({ project, stage, busy, onGenerate, onConfirm, onRoll
     }
     if (stage === 'world') {
       // worldSchemaFor 合并通用骨架与自定义块，联合类型复杂，这里显式收窄为 Record
-      const worldSchema = worldSchemaFor(project.genre) as unknown as ZodType<Record<string, unknown>>;
+      const worldSchema = worldSchemaFor(project.genre) as unknown as ZodType<
+        Record<string, unknown>
+      >;
       const parsed = parseData(worldSchema, project.world);
       if (parsed === null) return null;
       if (!parsed.ok) return <Alert type="error" showIcon message={parsed.error} />;
@@ -190,8 +195,8 @@ export function StagePanel({ project, stage, busy, onGenerate, onConfirm, onRoll
                 ? project.premise
                 : stage === 'world'
                   ? project.world
-                  : project.characters.find((item) => item.error !== null) ??
-                    project.relations.find((item) => item.error !== null);
+                  : (project.characters.find((item) => item.error !== null) ??
+                    project.relations.find((item) => item.error !== null));
             return row?.error ?? '未知错误';
           })()}
           style={{ marginBottom: 12 }}
@@ -212,9 +217,7 @@ export function StagePanel({ project, stage, busy, onGenerate, onConfirm, onRoll
         <>
           {renderArtifact()}
           <div className="block-title" style={{ marginTop: 20 }}>
-            <span
-              style={{ fontSize: 'var(--fs-small)', color: 'var(--muted)', fontWeight: 400 }}
-            >
+            <span style={{ fontSize: 'var(--fs-small)', color: 'var(--muted)', fontWeight: 400 }}>
               阶段操作
             </span>
             <span style={{ flex: 1 }} />

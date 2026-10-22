@@ -9,7 +9,8 @@ interface BlockProps {
 }
 
 function PowerSystemBlock({ data }: BlockProps) {
-  const block = data.powerSystem as { realms?: string[]; resources?: string; cost?: string } | undefined;
+  const block = data.powerSystem as
+    { realms?: string[]; resources?: string; cost?: string } | undefined;
   if (!block) return null;
   return (
     <div>
@@ -38,7 +39,8 @@ function PowerSystemBlock({ data }: BlockProps) {
 }
 
 function TechTreeBlock({ data }: BlockProps) {
-  const block = data.techTree as { keyTech?: string[]; socialImpact?: string; limits?: string } | undefined;
+  const block = data.techTree as
+    { keyTech?: string[]; socialImpact?: string; limits?: string } | undefined;
   if (!block) return null;
   return (
     <div>
@@ -68,8 +70,7 @@ function TechTreeBlock({ data }: BlockProps) {
 
 function InstitutionsBlock({ data }: BlockProps) {
   const block = data.institutions as
-    | { government?: string; military?: string; customs?: string }
-    | undefined;
+    { government?: string; military?: string; customs?: string } | undefined;
   if (!block) return null;
   return (
     <div>
@@ -167,11 +168,9 @@ export function WorldView({ world, genre, premiseSetting }: Props) {
   const rules = (world.rules as Array<{ name: string; description: string }> | undefined) ?? [];
   const factions =
     (world.factions as Array<{ name: string; nature: string; stance: string }> | undefined) ?? [];
-  const geography =
-    world.geography as Array<{ name: string; description: string }> | undefined;
+  const geography = world.geography as Array<{ name: string; description: string }> | undefined;
   const history = world.history as Array<{ event: string; impact: string }> | undefined;
-  const secrets =
-    world.secrets as Array<{ secret: string; relatedTo: string }> | undefined;
+  const secrets = world.secrets as Array<{ secret: string; relatedTo: string }> | undefined;
 
   const customRenderer = CUSTOM_BLOCKS[genre];
 

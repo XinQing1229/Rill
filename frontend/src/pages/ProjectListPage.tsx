@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Empty, Skeleton, Alert } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  GENRE_LABELS,
-  LENGTH_LABELS,
-  STAGE_LABELS,
-  type ProjectSummary,
-} from '@rill/shared';
+import { GENRE_LABELS, LENGTH_LABELS, STAGE_LABELS, type ProjectSummary } from '@rill/shared';
 import { listProjects } from '../api/novel';
 import { StatusTag } from '../components/StatusTag';
 import { formatUpdatedAt } from '../lib/stage';

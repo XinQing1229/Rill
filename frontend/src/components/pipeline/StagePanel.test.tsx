@@ -15,7 +15,14 @@ describe('StagePanel 状态分流', () => {
   it('上游未就绪时阻止生成并说明原因', () => {
     const project = makeProject(); // premise pending → world 阻塞
     render(
-      <StagePanel project={project} stage="world" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="world"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.getByText('暂不能生成')).toBeInTheDocument();
     expect(screen.getByText(/尚未完成/)).toBeInTheDocument();
@@ -25,7 +32,14 @@ describe('StagePanel 状态分流', () => {
   it('待生成且上游齐备时显示生成按钮', () => {
     const project = makeProject({ premise: makePremiseRow({ status: 'done' }) });
     render(
-      <StagePanel project={project} stage="world" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="world"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.getByRole('button', { name: /生成世界观/ })).toBeInTheDocument();
   });
@@ -36,7 +50,14 @@ describe('StagePanel 状态分流', () => {
       premise: { ...makeProject().premise!, status: 'generating' },
     });
     render(
-      <StagePanel project={project} stage="premise" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="premise"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.getByText(/生成中，进度每 1.5 秒自动刷新/)).toBeInTheDocument();
   });
@@ -46,7 +67,14 @@ describe('StagePanel 状态分流', () => {
       premise: makePremiseRow({ status: 'failed', error: '模型输出不符合结构' }),
     });
     render(
-      <StagePanel project={project} stage="premise" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="premise"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.getByText('生成失败')).toBeInTheDocument();
     expect(screen.getByText('模型输出不符合结构')).toBeInTheDocument();
@@ -58,7 +86,14 @@ describe('StagePanel 状态分流', () => {
       currentStage: 'premise',
     });
     render(
-      <StagePanel project={project} stage="premise" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="premise"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.getByText('产物已失效')).toBeInTheDocument();
   });
@@ -66,9 +101,18 @@ describe('StagePanel 状态分流', () => {
   it('完成后渲染种子产物与阶段操作', () => {
     const project = makeProject({ premise: makePremiseRow({ status: 'done' }) });
     render(
-      <StagePanel project={project} stage="premise" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="premise"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
-    expect(screen.getByText('守碑人少女与碑中古战魂同行北上，修复断裂的边境碑阵。')).toBeInTheDocument();
+    expect(
+      screen.getByText('守碑人少女与碑中古战魂同行北上，修复断裂的边境碑阵。'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '确认并推进' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新生成' })).toBeInTheDocument();
   });
@@ -76,7 +120,14 @@ describe('StagePanel 状态分流', () => {
   it('手动模式下确认按钮依赖模式', () => {
     const project = makeProject({ mode: 'auto', premise: makePremiseRow({ status: 'done' }) });
     render(
-      <StagePanel project={project} stage="premise" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="premise"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.queryByRole('button', { name: '确认并推进' })).not.toBeInTheDocument();
   });
@@ -84,7 +135,14 @@ describe('StagePanel 状态分流', () => {
   it('未实现阶段显示预告', () => {
     const project = makeProject();
     render(
-      <StagePanel project={project} stage="outline" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="outline"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.getByText(/该阶段暂未开放/)).toBeInTheDocument();
   });
@@ -94,11 +152,21 @@ describe('StagePanel 状态分流', () => {
       currentStage: 'characters',
       premise: makePremiseRow({ status: 'done' }),
       world: makeWorldRow({ status: 'done' }),
-      characters: [makeCharacterRow('沈青偃', 'protagonist'), makeCharacterRow('裴烈', 'supporting')],
+      characters: [
+        makeCharacterRow('沈青偃', 'protagonist'),
+        makeCharacterRow('裴烈', 'supporting'),
+      ],
       relations: [makeRelationRow('char_沈青偃', 'char_裴烈')],
     });
     render(
-      <StagePanel project={project} stage="characters" busy={false} onGenerate={noop} onConfirm={noop} onRollback={noop} />,
+      <StagePanel
+        project={project}
+        stage="characters"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
     );
     expect(screen.getAllByText('沈青偃').length).toBe(2); // 人物卡 + 关系表
     expect(screen.getAllByText('裴烈').length).toBe(2);

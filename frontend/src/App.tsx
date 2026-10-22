@@ -22,7 +22,11 @@ function NavItem({
   children: React.ReactNode;
 }) {
   return (
-    <Link to={to} className={`nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>
+    <Link
+      to={to}
+      className={`nav-item${active ? ' active' : ''}`}
+      aria-current={active ? 'page' : undefined}
+    >
       {children}
       {label}
       {badge !== undefined && <span className="count num">{badge}</span>}
@@ -32,18 +36,43 @@ function NavItem({
 
 const navIcon = {
   list: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2.5 3.5h11v9h-11z" />
       <path d="M5 6.5h6M5 9h4" />
     </svg>
   ),
   plus: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    >
       <path d="M8 3.5v9M3.5 8h9" />
     </svg>
   ),
   stethoscope: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    >
       <circle cx="8" cy="8" r="5.5" />
       <path d="M8 5.5v3l2 1.2" />
     </svg>
@@ -52,9 +81,26 @@ const navIcon = {
 
 const brandMark = (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-    <path d="M2 5c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2" stroke="#1b6c80" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M2 9c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2" stroke="#1b6c80" strokeWidth="1.5" strokeLinecap="round" opacity=".55" />
-    <path d="M2 13c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2" stroke="#1b6c80" strokeWidth="1.5" strokeLinecap="round" opacity=".3" />
+    <path
+      d="M2 5c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2"
+      stroke="#1b6c80"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <path
+      d="M2 9c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2"
+      stroke="#1b6c80"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      opacity=".55"
+    />
+    <path
+      d="M2 13c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 4 2"
+      stroke="#1b6c80"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      opacity=".3"
+    />
   </svg>
 );
 
@@ -105,7 +151,10 @@ function NotFoundPage() {
         <div>
           <h1>页面不存在</h1>
           <div className="sub">
-            访问的路径不存在，<Link to="/" style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>返回项目列表</Link>
+            访问的路径不存在，
+            <Link to="/" style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>
+              返回项目列表
+            </Link>
           </div>
         </div>
       </div>

@@ -1,5 +1,11 @@
 import { STAGE_LABELS, type ProjectDetail, type Stage } from '@rill/shared';
-import { formatTokens, readStageState, stageTokens, timelineStages, type StageState } from '../../lib/stage';
+import {
+  formatTokens,
+  readStageState,
+  stageTokens,
+  timelineStages,
+  type StageState,
+} from '../../lib/stage';
 
 /** 阶段状态 pill：状态优先，done 上再区分失效 */
 export function StageStatePill({ state }: { state: StageState | undefined }) {
@@ -92,14 +98,27 @@ export function StageTimeline({ project, viewedStage, onSelect, advance }: Props
             style={
               advance.disabled
                 ? undefined
-                : { background: 'var(--primary)', borderColor: 'transparent', color: 'var(--primary-ink)' }
+                : {
+                    background: 'var(--primary)',
+                    borderColor: 'transparent',
+                    color: 'var(--primary-ink)',
+                  }
             }
             disabled={advance.disabled}
             aria-label="确认并推进下一阶段"
             title="确认并推进下一阶段"
             onClick={advance.onClick}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M7 2.5v9M3.5 8 7 11.5 10.5 8" />
             </svg>
           </button>

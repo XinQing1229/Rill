@@ -3,13 +3,7 @@ import { Alert, App, Button, Segmented, Skeleton } from 'antd';
 import { Link, useParams } from 'react-router-dom';
 import { STAGE_LABELS, type PipelineMode, type Stage } from '@rill/shared';
 import { ApiError } from '../api/client';
-import {
-  confirmStage,
-  generateStage,
-  parseAnswers,
-  rollbackStage,
-  setMode,
-} from '../api/novel';
+import { confirmStage, generateStage, parseAnswers, rollbackStage, setMode } from '../api/novel';
 import { StageTimeline } from '../components/pipeline/StageTimeline';
 import { StagePanel } from '../components/pipeline/StagePanel';
 import { StatusTag } from '../components/StatusTag';
@@ -17,7 +11,16 @@ import { useProject } from '../hooks/useProject';
 import { chosenDimensionsLabel, isImplementedStage, readStageState } from '../lib/stage';
 
 const backArrow = (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M9.5 3.5 5 8l4.5 4.5" />
   </svg>
 );
@@ -97,7 +100,10 @@ export function ProjectWorkspacePage() {
 
   const handleModeChange = (mode: PipelineMode) => {
     if (mode === project.mode) return;
-    void runAction(() => setMode(project.id, mode), mode === 'auto' ? '已切换为自动推进' : '已切换为手动推进');
+    void runAction(
+      () => setMode(project.id, mode),
+      mode === 'auto' ? '已切换为自动推进' : '已切换为手动推进',
+    );
   };
 
   return (
@@ -108,7 +114,9 @@ export function ProjectWorkspacePage() {
         </Link>
         <h1>{project.title}</h1>
         <StatusTag status={project.status} />
-        {project.status === 'failed' && <span className="hint">上次生成失败，可在对应阶段重试</span>}
+        {project.status === 'failed' && (
+          <span className="hint">上次生成失败，可在对应阶段重试</span>
+        )}
         <div className="right">
           <Segmented
             value={project.mode}

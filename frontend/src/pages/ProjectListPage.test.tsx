@@ -31,7 +31,13 @@ describe('ProjectListPage', () => {
   it('展示项目概要与状态', async () => {
     mockList.mockResolvedValue([
       makeSummary({ status: 'idle' }),
-      makeSummary({ id: 'p2', title: '雾港来信', genre: 'xuanyi', status: 'running', currentStage: 'world' }),
+      makeSummary({
+        id: 'p2',
+        title: '雾港来信',
+        genre: 'xuanyi',
+        status: 'running',
+        currentStage: 'world',
+      }),
     ]);
     renderPage();
     expect(await screen.findByText('青川令')).toBeInTheDocument();
