@@ -19,5 +19,8 @@ backend/generated/
 *.log
 npm-debug.log*
 
+# design tool artifacts (taste-skill 的截图、报告与原型快照)
+.taste-skill/
+
 # os
 .DS_Store
