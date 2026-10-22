@@ -122,6 +122,55 @@ describe('创作流水线 API (e2e)', () => {
     expect(confirmed.body.currentStage).toBe('world');
   });
 
+  it('确认即恢复执行：直接生成下一阶段产物', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ title: 'resume 测试', answers })
+      .expect(201);
+    const id = created.body.id;
+
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/generate`)
+      .send({ wait: true })
+      .expect(201);
+
+    await request(app.getHttpServer()).post(`/api/novel/projects/${id}/confirm`).expect(201);
+
+    // 手动模式下确认不再只是推进指针，而是恢复图执行并生成下一阶段
+    const after = await request(app.getHttpServer())
+      .get(`/api/novel/projects/${id}`)
+      .expect(200);
+    expect(after.body.currentStage).toBe('world');
+    expect(after.body.world.status).toBe('done');
+  });
+
+  it('重新生成动作会重跑本阶段', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ title: '重新生成测试', answers })
+      .expect(201);
+    const id = created.body.id;
+
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/generate`)
+      .send({ wait: true })
+      .expect(201);
+    const callsAfterFirst = completeStructured.mock.calls.length;
+
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/confirm`)
+      .send({ action: 'regenerate' })
+      .expect(201);
+
+    // 本阶段被重新生成，模型调用次数增加
+    expect(completeStructured.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    const after = await request(app.getHttpServer())
+      .get(`/api/novel/projects/${id}`)
+      .expect(200);
+    expect(after.body.currentStage).toBe('premise');
+    expect(after.body.premise.status).toBe('done');
+  });
+
   it('生成接口立即返回，不等模型执行完成', async () => {
     const created = await request(app.getHttpServer())
       .post('/api/novel/projects')
@@ -201,5 +250,57 @@ describe('创作流水线 API (e2e)', () => {
       .post(`/api/novel/projects/${id}/generate`)
       .send({ wait: true });
     expect(response.body.message ?? '').not.toContain('尚未实现');
+  });
+
+  it('项目列表返回摘要字段且详情附带阶段列表', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ title: '列表测试', answers })
+      .expect(201);
+
+    const list = await request(app.getHttpServer()).get('/api/novel/projects').expect(200);
+    expect(Array.isArray(list.body)).toBe(true);
+    const item = list.body.find((p: { id: string }) => p.id === created.body.id);
+    expect(item.title).toBe('列表测试');
+    expect(item.currentStage).toBe('premise');
+    expect(item.status).toBe('idle');
+    // 列表只给摘要，不带问卷答案与产物
+    expect(item).not.toHaveProperty('answers');
+    expect(item).not.toHaveProperty('premise');
+
+    const got = await request(app.getHttpServer())
+      .get(`/api/novel/projects/${created.body.id}`)
+      .expect(200);
+    expect(got.body.stages).toContain('premise');
+    expect(got.body.stages).toContain('world');
+  });
+
+  it('自动模式下 generate 触发连续推进并停在失败阶段', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ title: '自动测试', answers, mode: 'auto' })
+      .expect(201);
+    const id = created.body.id;
+
+    const response = await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/generate`)
+      .send({})
+      .expect(201);
+    expect(response.body.started).toBe(true);
+    expect(response.body.auto).toBe(true);
+
+    // 后台链条：premise 完成 → world 被盲写「成功」（mock 绕过 schema 校验）→
+    // characters 因 mock 返回缺少 characters 字段而失败 → 停在该阶段
+    let after: { body: { status: string; currentStage: string } } | undefined;
+    for (let i = 0; i < 60; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const got = await request(app.getHttpServer()).get(`/api/novel/projects/${id}`);
+      if (got.body.status === 'failed') {
+        after = got;
+        break;
+      }
+    }
+    expect(after).toBeDefined();
+    expect(after?.body.currentStage).toBe('characters');
   });
 });

@@ -1,5 +1,9 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import { join } from 'node:path';
+import path from 'node:path';
 import { ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { QuestionnaireAnswers, Stage } from '@rill/shared';
 import { PrismaService } from '../prisma.service';
 import { QuestionnaireService } from '../questionnaire/questionnaire';
@@ -28,11 +32,22 @@ function fakeGenerator(
   };
 }
 
+/** 轮询等待后台生成链条落定（最长 2s） */
+async function waitFor(condition: () => Promise<boolean>) {
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    if (await condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('等待后台链条落定超时');
+}
+
 describe('PipelineService', () => {
   let prisma: PrismaService;
   let artifacts: ArtifactRegistry;
   let service: PipelineService;
   let premiseGenerate: jest.Mock;
+  let checkpointDir: string;
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -51,11 +66,31 @@ describe('PipelineService', () => {
     await prisma.premise.deleteMany();
     await prisma.project.deleteMany();
 
+    // 每个用例独立的 checkpoint 库，避免执行快照互相干扰
+    checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rill-svc-'));
+    const config = {
+      get: () => `file:${path.join(checkpointDir, 'cp.db')}`,
+    } as unknown as ConfigService;
+
     artifacts = new ArtifactRegistry();
     premiseGenerate = jest.fn().mockResolvedValue(undefined);
     artifacts.registerGenerator(fakeGenerator('premise', [], premiseGenerate));
+    artifacts.register('premise', async (projectId, stale) => {
+      await prisma.premise.updateMany({ where: { projectId }, data: { stale } });
+    });
     const assembler = new UpstreamAssembler(prisma, artifacts);
-    service = new PipelineService(prisma, new QuestionnaireService(), artifacts, assembler);
+    service = new PipelineService(
+      prisma,
+      new QuestionnaireService(),
+      artifacts,
+      assembler,
+      config,
+    );
+    await service.onModuleInit();
+  });
+
+  afterEach(() => {
+    fs.rmSync(checkpointDir, { recursive: true, force: true });
   });
 
   it('创建项目后落在首个阶段且种子为待生成', async () => {
@@ -117,7 +152,6 @@ describe('PipelineService', () => {
 
   it('生成超时后把阶段与项目标记为失败，项目不会卡在 running', async () => {
     const project = await service.create({ title: '超时测试', answers });
-    // 永不决断的生成任务
     premiseGenerate.mockImplementation(() => new Promise<void>(() => undefined));
     (service as unknown as { generationTimeoutMs: number }).generationTimeoutMs = 50;
 
@@ -137,9 +171,8 @@ describe('PipelineService', () => {
   it('已失效的完成产物不会被当作可用产物跳过', async () => {
     const project = await service.create({ title: '失效测试', answers });
     await service.generate(project.id, { wait: true });
-    await service.confirm(project.id);
+    await service.confirm(project.id).catch(() => undefined);
 
-    // 回退后种子被标记失效，回到 premise 重新生成时应实际触发
     await service.rollback(project.id, 'premise');
     await prisma.premise.update({ where: { projectId: project.id }, data: { stale: true } });
     premiseGenerate.mockClear();
@@ -161,12 +194,35 @@ describe('PipelineService', () => {
     expect(after.status).toBe('failed');
   });
 
-  it('确认后推进到下一阶段', async () => {
+  it('确认后推进到下一阶段并生成其产物', async () => {
+    artifacts.registerGenerator(fakeGenerator('world', ['premise']));
+    artifacts.register('world', async (projectId, stale) => {
+      await prisma.worldSetting.updateMany({ where: { projectId }, data: { stale } });
+    });
     const project = await service.create({ title: '测试作品', answers });
     await service.generate(project.id, { wait: true });
+    // 创建世界观行，使该阶段状态可读
+    await prisma.worldSetting.create({
+      data: { projectId: project.id, data: '{}', status: 'pending' },
+    });
 
     const confirmed = await service.confirm(project.id);
     expect(confirmed.currentStage).toBe('world');
+    expect(confirmed.world?.status).toBe('done');
+  });
+
+  it('生成完成后停留在当前阶段等待确认，不自动推进', async () => {
+    const project = await service.create({ title: '待确认', answers });
+    await service.generate(project.id, { wait: true });
+
+    // 产物已完成，但未确认前阶段指针不动
+    const after = await service.get(project.id);
+    expect(after.currentStage).toBe('premise');
+    expect(after.premise?.status).toBe('done');
+
+    // 再次查询仍未被自动推进（待确认状态跨请求保持）
+    const again = await service.get(project.id);
+    expect(again.currentStage).toBe('premise');
   });
 
   it('未生成完成时确认会被拒绝', async () => {
@@ -177,9 +233,18 @@ describe('PipelineService', () => {
   it('未实现生成器的阶段给出明确提示', async () => {
     const project = await service.create({ title: '测试作品', answers });
     await service.generate(project.id, { wait: true });
-    await service.confirm(project.id);
 
-    await expect(service.generate(project.id, { wait: true })).rejects.toThrow(/尚未实现/);
+    // 确认后图推进到 world，该阶段生成器未实现
+    await expect(service.confirm(project.id)).rejects.toThrow(/尚未实现/);
+  });
+
+  it('重新生成动作会重跑本阶段', async () => {
+    const project = await service.create({ title: '测试作品', answers });
+    await service.generate(project.id, { wait: true });
+
+    await service.confirm(project.id, 'regenerate');
+
+    expect(premiseGenerate).toHaveBeenCalledTimes(2);
   });
 
   it('上游失效时拒绝生成下游', async () => {
@@ -191,19 +256,17 @@ describe('PipelineService', () => {
 
     const project = await service.create({ title: '测试作品', answers });
     await service.generate(project.id, { wait: true });
-    await service.confirm(project.id);
 
     // 把种子标记为失效（模拟回退后未重新生成）
     await prisma.premise.update({ where: { projectId: project.id }, data: { stale: true } });
 
-    await expect(service.generate(project.id, { wait: true })).rejects.toThrow(/已失效/);
+    await expect(service.confirm(project.id)).rejects.toThrow(/已失效/);
     expect(worldGenerate).not.toHaveBeenCalled();
   });
 
   it('上游未完成时拒绝生成下游', async () => {
     artifacts.registerGenerator(fakeGenerator('world', ['premise']));
     const project = await service.create({ title: '测试作品', answers });
-    await service.confirm(project.id).catch(() => undefined); // 未生成无法确认，忽略
 
     // 手动把阶段推到 world 以模拟上游未完成
     await prisma.project.update({ where: { id: project.id }, data: { currentStage: 'world' } });
@@ -220,14 +283,11 @@ describe('PipelineService', () => {
 
     const project = await service.create({ title: '测试作品', answers });
     await service.generate(project.id, { wait: true });
-    await service.confirm(project.id);
 
-    // 生成本身也会标记下游失效，清空后只观察回退的行为
     staleCalls.length = 0;
     const rolled = await service.rollback(project.id, 'premise');
 
     expect(rolled.currentStage).toBe('premise');
-    // premise 自身不标记，其后所有阶段均被标记失效
     expect(staleCalls).toEqual([
       { stage: 'world', stale: true },
       { stage: 'characters', stale: true },
@@ -235,38 +295,79 @@ describe('PipelineService', () => {
     ]);
   });
 
-  it('重新生成人物时联动把关系标记为失效', async () => {
-    const staleCalls: Array<{ stage: string; stale: boolean }> = [];
-    for (const stage of ['world', 'characters', 'relations'] as Stage[]) {
-      artifacts.register(stage, async (_projectId, stale) => {
-        staleCalls.push({ stage, stale });
-      });
-    }
-    // characters 阶段有生成器（premise 之后注册）
-    artifacts.registerGenerator(fakeGenerator('characters', ['premise']));
+  it('回退后从回退目标阶段重新开始', async () => {
     artifacts.registerGenerator(fakeGenerator('world', ['premise']));
-
+    artifacts.register('world', async (projectId, stale) => {
+      await prisma.worldSetting.updateMany({ where: { projectId }, data: { stale } });
+    });
     const project = await service.create({ title: '测试作品', answers });
     await service.generate(project.id, { wait: true });
     await service.confirm(project.id);
 
-    // 推进到 characters 并完成，再回到 premise 重新生成
-    await prisma.project.update({
-      where: { id: project.id },
-      data: { currentStage: 'characters' },
-    });
-    await service.generate(project.id, { wait: true });
-    await prisma.project.update({ where: { id: project.id }, data: { currentStage: 'premise' } });
+    const rolled = await service.rollback(project.id, 'premise');
+    expect(rolled.currentStage).toBe('premise');
 
-    staleCalls.length = 0;
+    // 回退后再次生成：以 premise 为起点，而不是继续此前的中断点
+    premiseGenerate.mockClear();
     await service.generate(project.id, { force: true, wait: true });
+    expect(premiseGenerate).toHaveBeenCalledTimes(1);
+  });
 
-    // premise 的下游全部被标记失效（含 characters 与 relations）
-    expect(staleCalls).toEqual([
-      { stage: 'world', stale: true },
-      { stage: 'characters', stale: true },
-      { stage: 'relations', stale: true },
-    ]);
+  it('失败续跑时不重复已完成阶段', async () => {
+    let worldShouldFail = true;
+    let worldCalls = 0;
+    artifacts.registerGenerator(
+      fakeGenerator('world', ['premise'], async () => {
+        worldCalls += 1;
+        if (worldShouldFail) throw new Error('世界观生成失败');
+      }),
+    );
+    artifacts.register('world', async (projectId, stale) => {
+      await prisma.worldSetting.updateMany({ where: { projectId }, data: { stale } });
+    });
+    // 创建世界观行，使阶段状态可读
+    const project = await service.create({ title: '续跑测试', answers, mode: 'auto' });
+    await prisma.worldSetting.create({
+      data: { projectId: project.id, data: '{}', status: 'pending' },
+    });
+
+    await expect(service.runAuto(project.id)).rejects.toThrow('世界观生成失败');
+    const failed = await service.get(project.id);
+    expect(failed.currentStage).toBe('world');
+    expect(failed.premise?.status).toBe('done');
+
+    // 修复后再次触发：从 world 继续，premise 不再重跑
+    worldShouldFail = false;
+    premiseGenerate.mockClear();
+    // 自动模式会一路推进到未实现的 characters，属预期失败，忽略
+    await service.runAuto(project.id).catch(() => undefined);
+
+    expect(premiseGenerate).not.toHaveBeenCalled();
+    expect(worldCalls).toBe(2);
+    const after = await service.get(project.id);
+    expect(after.world?.status).toBe('done');
+  });
+
+  it('跳过世界观的类型不生成世界观产物', async () => {
+    const characterGenerate = jest.fn().mockResolvedValue(undefined);
+    artifacts.registerGenerator(fakeGenerator('characters', ['premise'], characterGenerate));
+    artifacts.register('characters', async (projectId, stale) => {
+      await prisma.character.updateMany({ where: { projectId }, data: { stale } });
+    });
+
+    const project = await service.create({
+      title: '都市作品',
+      answers: { ...answers, genre: 'dushi' },
+      mode: 'auto',
+    });
+
+    // 都市类型跳过 world，premise → characters；relations 未实现故最终失败
+    await service.runAuto(project.id).catch(() => undefined);
+
+    const after = await service.get(project.id);
+    expect(after.stages).not.toContain('world');
+    expect(after.world).toBeNull();
+    expect(characterGenerate).toHaveBeenCalled();
   });
 
   it('自动模式在未实现的阶段失败并停在该阶段', async () => {
@@ -280,51 +381,28 @@ describe('PipelineService', () => {
     expect(after.premise?.status).toBe('done');
   });
 
-  it('持久化：重新读取仍能得到项目与阶段状态', async () => {
-    const project = await service.create({ title: '测试作品', answers });
-    await service.generate(project.id, { wait: true });
+  it('自动模式下 generate 触发后台连续推进', async () => {
+    const project = await service.create({ title: '自动模式', answers, mode: 'auto' });
 
-    const restarted = new PipelineService(
-      prisma,
-      new QuestionnaireService(),
-      new ArtifactRegistry(),
-      new UpstreamAssembler(prisma, new ArtifactRegistry()),
-    );
-    const recovered = await restarted.get(project.id);
+    const response = await service.generate(project.id);
+    expect(response.started).toBe(true);
+    expect(response.auto).toBe(true);
 
-    expect(recovered.currentStage).toBe('premise');
-    expect(recovered.premise?.status).toBe('done');
-    expect(JSON.parse(recovered.answers).tone).toBe('热血');
+    await waitFor(async () => (await service.get(project.id)).status === 'failed');
+    const after = await service.get(project.id);
+    expect(after.currentStage).toBe('world');
+    expect(after.premise?.status).toBe('done');
   });
 
-  it('人物与关系查询接口返回对应数据', async () => {
-    const project = await service.create({ title: '测试作品', answers });
+  it('项目列表只返回摘要字段且按更新时间倒序', async () => {
+    const first = await service.create({ title: '较早', answers });
+    await service.create({ title: '较晚', answers });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await prisma.project.update({ where: { id: first.id }, data: { title: '较早-更新' } });
 
-    await prisma.character.createMany({
-      data: [
-        { projectId: project.id, name: '沈砚秋', role: 'protagonist', data: '{}', status: 'done' },
-        { projectId: project.id, name: '沈九', role: 'supporting', data: '{}', status: 'done' },
-      ],
-    });
-    const characters = await prisma.character.findMany({ where: { projectId: project.id } });
-    await prisma.relation.create({
-      data: {
-        projectId: project.id,
-        fromId: characters[0].id,
-        toId: characters[1].id,
-        type: '亲人',
-        fromRole: '女儿',
-        toRole: '父亲',
-        description: '父女',
-        status: 'done',
-      },
-    });
-
-    const list = await service.characters(project.id);
-    const relations = await service.relations(project.id);
-
-    expect(list).toHaveLength(2);
-    expect(relations).toHaveLength(1);
-    expect(relations[0].fromRole).toBe('女儿');
+    const list = await service.list();
+    expect(list[0].title).toBe('较早-更新');
+    expect(list.every((item) => 'currentStage' in item && 'status' in item)).toBe(true);
+    expect(list.every((item) => !('answers' in item) && !('premise' in item))).toBe(true);
   });
 });

@@ -59,5 +59,9 @@ export default function registerConfiguration() {
         outputPerMTokens: numOrNull(process.env.LLM_PRICE_OUTPUT_PER_MTOKENS),
       },
     },
+    pipeline: {
+      // 流水线执行快照的 SQLite 库，独立于业务库 dev.db
+      checkpointFile: process.env.CHECKPOINT_DB ?? 'file:./checkpoints.db',
+    },
   };
 }

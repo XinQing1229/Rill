@@ -6,12 +6,17 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import { ArtifactStatus, PipelineMode, QuestionnaireAnswers, Stage } from '@rill/shared';
 import { PrismaService } from '../prisma.service';
-import { stagesFor } from '../genre/genre-profile';
+import { profileFor, stagesFor } from '../genre/genre-profile';
 import { MissingRequiredAnswersError, QuestionnaireService } from '../questionnaire/questionnaire';
 import { ArtifactRegistry } from './artifact.registry';
 import { UpstreamAssembler } from './upstream.assembler';
+import { compilePipelineGraph, PipelineState, StageRunner } from './pipeline.graph';
+import { createStageRunner, markDownstreamStale, setStageStatus } from './stage.runner';
+import { createCheckpointer } from './checkpointer';
 
 export interface CreateProjectInput {
   title: string;
@@ -27,28 +32,41 @@ const GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
 
 const TIMEOUT_MARK = Symbol('generation-timeout');
 
+/** 确认入口的动作：继续推进 / 重新生成当前阶段 */
+export type ConfirmAction = 'confirm' | 'regenerate';
+
 @Injectable()
 export class PipelineService implements OnModuleInit {
   private readonly logger = new Logger(PipelineService.name);
   /** 可被测试覆盖，以便用极小值验证超时路径 */
   private readonly generationTimeoutMs: number = GENERATION_TIMEOUT_MS;
+  private readonly runner: StageRunner;
+  private checkpointer!: SqliteSaver;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly questionnaire: QuestionnaireService,
     private readonly artifacts: ArtifactRegistry,
     private readonly assembler: UpstreamAssembler,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    this.runner = createStageRunner({ prisma, assembler, artifacts });
+  }
 
   async onModuleInit(): Promise<void> {
-    // 重启时把被中断的生成任务标记为失败，避免项目永久卡在 running 状态
+    // 释放被中断的运行锁：执行进度仍保留在 checkpointer，再次触发即从中断处继续
     const result = await this.prisma.project.updateMany({
       where: { status: 'running' },
       data: { status: 'failed' },
     });
     if (result.count > 0) {
-      this.logger.warn(`重启时重置了 ${result.count} 个被中断的生成任务为失败状态`);
+      this.logger.warn(
+        `重启时释放了 ${result.count} 个被中断的生成任务（进度保留在 checkpoint，可续跑）`,
+      );
     }
+    this.checkpointer = createCheckpointer(
+      this.config.get<string>('pipeline.checkpointFile') ?? 'file:./checkpoints.db',
+    );
   }
 
   async create(input: CreateProjectInput) {
@@ -82,21 +100,56 @@ export class PipelineService implements OnModuleInit {
       include: { premise: true, world: true, characters: true, relations: true },
     });
     if (!project) throw new NotFoundException(`项目不存在: ${id}`);
-    return project;
+    // 附加该类型的完整阶段列表：前端时间轴与上游判断共用一份事实来源
+    return {
+      ...project,
+      stages: stagesFor(project.genre as QuestionnaireAnswers['genre']),
+    };
+  }
+
+  /** 项目列表（列表页用，按更新时间倒序） */
+  async list() {
+    return this.prisma.project.findMany({
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        genre: true,
+        length: true,
+        mode: true,
+        currentStage: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   }
 
   /**
-   * 触发生成：立即返回（阶段进入 generating），生成在后台推进。
-   * 并发防护：项目级 running 锁；已 done 且未强制时直接返回已有产物。
+   * 触发生成：立即返回（阶段进入 generating），生成在后台由图推进。
+   * 已有执行快照时从中断处恢复，否则以当前阶段为起点启动。
    */
-  async generate(id: string, options: { force?: boolean; wait?: boolean } = {}) {
+  async generate(
+    id: string,
+    options: { force?: boolean; wait?: boolean; autoChain?: boolean } = {},
+  ) {
     const project = await this.get(id);
     const stage = project.currentStage as Stage;
     const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
 
-    const generator = this.artifacts.getGenerator(stage);
-    if (!generator) {
-      throw new BadRequestException(`阶段 ${stage} 的生成能力尚未实现（留给后续 change）`);
+    // 自动模式且项目空闲/失败（失败续跑）：后台启动连续推进
+    if (
+      project.mode === 'auto' &&
+      !options.autoChain &&
+      ['idle', 'failed'].includes(project.status)
+    ) {
+      void this.runAuto(id).catch(() => undefined);
+      return {
+        stage,
+        status: 'generating' as ArtifactStatus,
+        started: true,
+        auto: true,
+      };
     }
 
     if (project.status === 'running') {
@@ -104,21 +157,21 @@ export class PipelineService implements OnModuleInit {
     }
 
     const artifactState = this.assembler.readStageState(project, stage);
-    // 已生效（完成且未失效）的产物不重复生成；失效或未完成则重新生成
+    // 已生效（完成且未失效）的产物不重复生成
     if (artifactState?.status === 'done' && !artifactState.stale && !options.force) {
       return { stage, status: artifactState.status, started: false };
     }
 
-    // 装配上游产物（上游未完成或失效时抛错）
-    const context = await this.assembler.assemble(id, stage);
+    if (options.force) {
+      // 打破幂等，使该阶段重新生成（下游失效由节点内统一处理）；
+      // 同时清除中断点，否则会恢复到下一阶段而不是重跑本阶段
+      await this.artifacts.setStale(stage, id, true);
+      await this.checkpointer.deleteThread(id);
+    }
 
-    // 重新生成某阶段时，其下游产物一律标记失效（如重生成人物 → 关系失效）
-    await this.markDownstreamStale(id, stage, answers.genre);
-
-    await this.setStageStatus(id, stage, 'generating');
     await this.prisma.project.update({ where: { id }, data: { status: 'running' } });
 
-    const task = this.runGenerationWithTimeout(id, stage, generator, context, answers);
+    const task = this.runGraph(id, answers, project.mode as PipelineMode, stage);
     if (options.wait) {
       await task;
     } else {
@@ -128,8 +181,8 @@ export class PipelineService implements OnModuleInit {
     return { stage, status: 'generating' as ArtifactStatus, started: true };
   }
 
-  /** 手动模式：确认当前阶段后推进到下一阶段 */
-  async confirm(id: string) {
+  /** 手动模式：确认当前阶段后恢复图，推进到下一阶段 */
+  async confirm(id: string, action: ConfirmAction = 'confirm') {
     const project = await this.get(id);
     const stage = project.currentStage as Stage;
 
@@ -141,14 +194,20 @@ export class PipelineService implements OnModuleInit {
       throw new BadRequestException('当前阶段产物已失效，请先重新生成后再确认');
     }
 
-    const stages = stagesFor(project.genre as QuestionnaireAnswers['genre']);
-    const index = stages.indexOf(stage);
-    const next = stages[index + 1];
+    if (project.status === 'running') {
+      throw new ConflictException('该项目有生成任务正在进行，请勿重复触发');
+    }
 
-    await this.prisma.project.update({
-      where: { id },
-      data: { currentStage: next ?? stage, status: next ? 'idle' : 'done' },
-    });
+    if (action === 'regenerate') {
+      // 重新生成：使本阶段失效，并清除中断点，使图从本阶段重新开始
+      await this.artifacts.setStale(stage, id, true);
+      await this.checkpointer.deleteThread(id);
+    }
+
+    const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
+    await this.prisma.project.update({ where: { id }, data: { status: 'running' } });
+
+    await this.runGraph(id, answers, project.mode as PipelineMode, stage);
     return this.get(id);
   }
 
@@ -160,7 +219,14 @@ export class PipelineService implements OnModuleInit {
       throw new BadRequestException(`该类型不支持阶段: ${stage}`);
     }
 
-    await this.markDownstreamStale(id, stage, project.genre as QuestionnaireAnswers['genre']);
+    await markDownstreamStale(
+      this.artifacts,
+      id,
+      stage,
+      project.genre as QuestionnaireAnswers['genre'],
+    );
+    // 清除执行快照，使下次启动从入口路由按新的 currentStage 开始
+    await this.checkpointer.deleteThread(id);
     await this.prisma.project.update({
       where: { id },
       data: { currentStage: stage, status: 'idle' },
@@ -192,36 +258,49 @@ export class PipelineService implements OnModuleInit {
     });
   }
 
-  /** 自动模式：连续推进；失败停在该阶段，再次启动从失败阶段继续 */
+  /**
+   * 自动模式：无中断地连续推进；失败停在该阶段，
+   * 再次启动从 checkpointer 记录的中断处继续。
+   */
   async runAuto(id: string) {
     const project = await this.get(id);
-    const stages = stagesFor(project.genre as QuestionnaireAnswers['genre']);
-    const startIndex = stages.indexOf(project.currentStage as Stage);
+    const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
 
-    for (const stage of stages.slice(startIndex)) {
-      await this.prisma.project.update({ where: { id }, data: { currentStage: stage } });
-      try {
-        await this.generate(id, { wait: true });
-      } catch (error) {
-        await this.prisma.project.update({ where: { id }, data: { status: 'failed' } });
-        throw error;
-      }
+    await this.prisma.project.update({ where: { id }, data: { status: 'running' } });
+    try {
+      await this.runGraph(id, answers, 'auto', project.currentStage as Stage);
+    } catch (error) {
+      await this.prisma.project.update({ where: { id }, data: { status: 'failed' } });
+      throw error;
     }
-    await this.prisma.project.update({ where: { id }, data: { status: 'done' } });
     return this.get(id);
   }
 
   /**
-   * 带总体超时的生成执行。超时后主动把阶段与项目标记为失败，
-   * 避免后台任务挂起导致项目永久停在 running（后续操作全被拒绝）。
+   * 执行图：已有快照则恢复（input 为 null），否则以 currentStage 为起点启动。
+   * 外层保留总体超时兜底，避免后台任务挂起导致项目永久停在 running。
    */
-  private async runGenerationWithTimeout(
-    projectId: string,
-    stage: Stage,
-    generator: { generate: (...args: unknown[]) => Promise<unknown> },
-    context: Parameters<typeof generator.generate>[0],
+  private async runGraph(
+    id: string,
     answers: QuestionnaireAnswers,
+    mode: PipelineMode,
+    fallbackStage: Stage,
   ): Promise<void> {
+    const stages = stagesFor(answers.genre);
+    const graph = compilePipelineGraph({
+      stages,
+      runner: this.runner,
+      checkpointer: this.checkpointer,
+      mode,
+      skipStages: profileFor(answers.genre).skipStages,
+    });
+    const config = { configurable: { thread_id: id } };
+
+    const existing = await this.checkpointer.getTuple(config);
+    const input: PipelineState | null = existing
+      ? null
+      : { projectId: id, genre: answers.genre, mode, currentStage: fallbackStage, answers };
+
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<typeof TIMEOUT_MARK>((resolve) => {
       timer = setTimeout(() => resolve(TIMEOUT_MARK), this.generationTimeoutMs);
@@ -231,72 +310,47 @@ export class PipelineService implements OnModuleInit {
 
     try {
       const outcome = await Promise.race([
-        this.runGeneration(projectId, stage, generator, context, answers).then(
-          () => 'settled' as const,
-        ),
+        graph.invoke(input, config).then((state) => ({ kind: 'state' as const, state })),
         timeout,
       ]);
 
       if (outcome === TIMEOUT_MARK) {
         const message = `生成超时（超过 ${Math.round(this.generationTimeoutMs / 60000)} 分钟），已中止并标记失败`;
-        await this.setStageStatus(projectId, stage, 'failed', message);
-        await this.prisma.project.update({ where: { id: projectId }, data: { status: 'failed' } });
+        await this.failProject(id, fallbackStage, message);
         throw new Error(message);
       }
+
+      // 同步执行进度（冗余写入，便于查询与前端展示）
+      await this.prisma.project.update({
+        where: { id },
+        data: { currentStage: outcome.state.currentStage ?? fallbackStage, status: 'idle' },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.failProject(id, fallbackStage, message);
+      throw error;
     } finally {
       if (timer) clearTimeout(timer);
     }
   }
 
-  private async runGeneration(
-    projectId: string,
-    stage: Stage,
-    generator: { generate: (...args: unknown[]) => Promise<unknown> },
-    context: Parameters<typeof generator.generate>[0],
-    answers: QuestionnaireAnswers,
-  ): Promise<void> {
-    try {
-      await generator.generate(context, answers, projectId);
-      // 状态由流水线统一推进，生成器只写产物数据与用量
-      await this.setStageStatus(projectId, stage, 'done');
-      await this.prisma.project.update({ where: { id: projectId }, data: { status: 'idle' } });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await this.setStageStatus(projectId, stage, 'failed', message);
-      await this.prisma.project.update({ where: { id: projectId }, data: { status: 'failed' } });
-      // 重新抛出，让等待方（自动模式）感知失败并停止推进
-      throw error;
+  /**
+   * 标记项目失败。若阶段产物还停在 generating（如超时中断），补记为 failed；
+   * 已由 runner 标记为 failed 的不再覆盖，避免误伤已完成阶段。
+   */
+  private async failProject(id: string, fallbackStage: Stage, message?: string): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id },
+      include: { premise: true, world: true, characters: true, relations: true },
+    });
+    if (!project) return;
+    const stage = (project.currentStage ?? fallbackStage) as Stage;
+    if (message) {
+      const state = this.assembler.readStageState(project, stage);
+      if (state?.status !== 'failed') {
+        await setStageStatus(this.prisma, id, stage, 'failed', message);
+      }
     }
-  }
-
-  /** 阶段产物状态推进（覆盖 1:1 与 1:N 两类产物） */
-  private async setStageStatus(
-    projectId: string,
-    stage: Stage,
-    status: ArtifactStatus,
-    error?: string,
-  ): Promise<void> {
-    const data = { status, error: error ?? null };
-    if (stage === 'premise') {
-      await this.prisma.premise.updateMany({ where: { projectId }, data });
-    } else if (stage === 'world') {
-      await this.prisma.worldSetting.updateMany({ where: { projectId }, data });
-    } else if (stage === 'characters') {
-      await this.prisma.character.updateMany({ where: { projectId }, data });
-    } else if (stage === 'relations') {
-      await this.prisma.relation.updateMany({ where: { projectId }, data });
-    }
-  }
-
-  private async markDownstreamStale(
-    projectId: string,
-    targetStage: Stage,
-    genre: QuestionnaireAnswers['genre'],
-  ): Promise<void> {
-    const stages = stagesFor(genre);
-    const targetIndex = stages.indexOf(targetStage);
-    for (const stage of stages.slice(targetIndex + 1)) {
-      await this.artifacts.setStale(stage, projectId, true);
-    }
+    await this.prisma.project.update({ where: { id }, data: { status: 'failed' } });
   }
 }

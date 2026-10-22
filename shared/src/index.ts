@@ -119,6 +119,17 @@ export const GenerateBodySchema = z.object({
   wait: z.boolean().optional(),
 });
 
+/** 确认动作：confirm 确认并推进到下一阶段；regenerate 重新生成本阶段 */
+export const CONFIRM_ACTIONS = ['confirm', 'regenerate'] as const;
+export type ConfirmAction = (typeof CONFIRM_ACTIONS)[number];
+
+/** POST /api/novel/projects/:id/confirm 请求体（可为空，默认确认推进） */
+export const ConfirmBodySchema = z
+  .object({
+    action: z.enum(CONFIRM_ACTIONS).optional(),
+  })
+  .default({});
+
 /** POST /api/novel/projects/:id/rollback 请求体 */
 export const RollbackBodySchema = z.object({
   stage: z.enum(STAGES),
@@ -309,4 +320,139 @@ export interface StageContext {
   premise?: Premise;
   world?: Record<string, unknown>;
   characters?: Character[];
+}
+
+// ---------------- 项目读取契约（工作台前端消费） ----------------
+
+/** 项目整体状态 */
+export const PROJECT_STATUSES = ['idle', 'running', 'done', 'failed'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+/** 阶段中文名（前后端展示共用） */
+export const STAGE_LABELS: Record<Stage, string> = {
+  premise: '种子',
+  world: '世界观',
+  characters: '人物',
+  relations: '关系',
+  outline: '大纲',
+  beats: '细纲',
+  prose: '正文',
+};
+
+/** 类型中文名（展示用） */
+export const GENRE_LABELS: Record<Genre, string> = {
+  xuanhuan: '玄幻',
+  dushi: '都市',
+  xuanyi: '悬疑',
+  lishi: '历史',
+  kehuan: '科幻',
+  yanqing: '言情',
+  other: '其他',
+};
+
+/** 篇幅中文名（展示用） */
+export const LENGTH_LABELS: Record<StoryLength, string> = {
+  short: '短篇',
+  medium: '中篇',
+  long: '长篇',
+};
+
+/** 问卷结构（GET /api/novel/questionnaire 响应） */
+export interface QuestionOption {
+  value: string;
+  label: string;
+}
+
+export interface Question {
+  /** 问卷键：必答项直接取值（如 length），选答带 `extras.` 前缀 */
+  key: string;
+  label: string;
+  required: boolean;
+  options: QuestionOption[];
+}
+
+export interface QuestionnaireDefinition {
+  version: string;
+  questions: Question[];
+}
+
+/** 产物行公共字段；data 为按阶段 schema 校验后的 JSON 字符串 */
+export interface ArtifactRowBase {
+  id: string;
+  projectId: string;
+  status: ArtifactStatus;
+  stale: boolean;
+  promptTokens: number;
+  completionTokens: number;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PremiseArtifact extends ArtifactRowBase {
+  data: string;
+}
+
+export interface WorldArtifact extends ArtifactRowBase {
+  data: string;
+}
+
+export interface CharacterRow extends ArtifactRowBase {
+  name: string;
+  role: string;
+  data: string;
+}
+
+export interface RelationRow extends ArtifactRowBase {
+  fromId: string;
+  toId: string;
+  type: string;
+  fromRole: string;
+  toRole: string;
+  description: string;
+}
+
+/** POST /api/novel/projects/:id/generate 响应（auto 表示触发了自动连续推进） */
+export interface GenerateResponse {
+  stage: Stage;
+  status: ArtifactStatus;
+  started: boolean;
+  auto?: boolean;
+}
+
+/** GET /api/novel/projects/:id 响应：项目详情 + 各阶段产物行 + 完整阶段列表 */
+export interface ProjectDetail {
+  id: string;
+  title: string;
+  genre: Genre;
+  length: StoryLength;
+  mode: PipelineMode;
+  currentStage: Stage;
+  status: ProjectStatus;
+  /** 该类型的完整阶段列表（含跳过的阶段），由后端 stagesFor 计算 */
+  stages: Stage[];
+  /** 问卷答案 JSON 字符串，按 QuestionnaireAnswers 解析 */
+  answers: string;
+  questionnaireVersion: string;
+  promptTokens: number;
+  completionTokens: number;
+  createdAt: string;
+  updatedAt: string;
+  premise: PremiseArtifact | null;
+  world: WorldArtifact | null;
+  characters: CharacterRow[];
+  relations: RelationRow[];
+}
+
+/** GET /api/novel/projects 列表项（按更新时间倒序） */
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  genre: Genre;
+  length: StoryLength;
+  mode: PipelineMode;
+  currentStage: Stage;
+  status: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
 }

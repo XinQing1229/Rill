@@ -1,5 +1,7 @@
 import { Body, Controller, Get, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import {
+  ConfirmAction,
+  ConfirmBodySchema,
   CreateProjectSchema,
   GENRES,
   GenerateBodySchema,
@@ -33,6 +35,12 @@ export class NovelController {
     return this.pipeline.create(body as Parameters<PipelineService['create']>[0]);
   }
 
+  /** 项目列表（列表页用，按更新时间倒序） */
+  @Get('projects')
+  list() {
+    return this.pipeline.list();
+  }
+
   @Get('projects/:id')
   get(@Param('id') id: string) {
     return this.pipeline.get(id);
@@ -47,9 +55,14 @@ export class NovelController {
     return this.pipeline.generate(id, body as { force?: boolean; wait?: boolean });
   }
 
+  /** 确认推进或重新生成本阶段：由流水线图从中断处恢复执行 */
   @Post('projects/:id/confirm')
-  confirm(@Param('id') id: string) {
-    return this.pipeline.confirm(id);
+  confirm(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ConfirmBodySchema)) body: unknown,
+  ) {
+    const { action } = body as { action?: ConfirmAction };
+    return this.pipeline.confirm(id, action ?? 'confirm');
   }
 
   @Post('projects/:id/rollback')

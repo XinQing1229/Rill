@@ -16,6 +16,7 @@
     "@langchain/core": "^1.2.20",
     "@langchain/deepseek": "^1.1.18",
     "@langchain/langgraph": "^1.5.1",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.1.0",
     "@nestjs/common": "^11.1.6",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.6",
