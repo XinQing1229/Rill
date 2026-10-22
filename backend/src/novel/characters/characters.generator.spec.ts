@@ -121,7 +121,7 @@ describe('CharacterGenerator', () => {
     expect(messages[0].content).toContain('4 个人物');
   });
 
-  it('问卷人物规模选答覆盖默认人数', async () => {
+  it('问卷人物数量选答覆盖默认人数', async () => {
     const { generator, completeStructured, create } = setup();
     completeStructured.mockResolvedValue(makeCharacters(6));
 

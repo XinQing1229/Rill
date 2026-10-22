@@ -14,6 +14,13 @@ import { ApiError } from '../api/client';
 import { createProject } from '../api/novel';
 import { useQuestionnaire } from '../hooks/useQuestionnaire';
 
+const REQUIRED_FIELD_LABELS: Record<(typeof REQUIRED_ANSWER_FIELDS)[number], string> = {
+  genre: '类型',
+  length: '篇幅',
+  tone: '基调',
+  pov: '叙事视角',
+};
+
 const GENRE_HINTS: Record<Genre, string> = {
   xuanhuan: '力量体系与境界',
   dushi: '现代都市行业与生活',
@@ -129,13 +136,9 @@ export function NewProjectPage() {
   };
 
   const missingRequired = useMemo(() => {
-    const missing: string[] = [];
-    if (!genre) missing.push('类型');
-    for (const key of REQUIRED_ANSWER_FIELDS) {
-      if (key === 'genre') continue;
-      if (!values[key]) missing.push(key);
-    }
-    return missing;
+    return REQUIRED_ANSWER_FIELDS.filter((key) =>
+      key === 'genre' ? !genre : !values[key],
+    ).map((key) => REQUIRED_FIELD_LABELS[key]);
   }, [genre, values]);
 
   const submit = async () => {
@@ -269,7 +272,7 @@ export function NewProjectPage() {
                     {missingRequired.length > 0 && (
                       <span style={{ color: 'var(--negative)' }}>
                         {' '}
-                        必答未完成：{missingRequired.join('、')}
+                        还需填写：{missingRequired.join('、')}
                       </span>
                     )}
                   </span>

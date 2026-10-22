@@ -185,12 +185,12 @@ export const questionnaireFixture: QuestionnaireDefinition = {
     },
     {
       key: 'extras.characterScale',
-      label: '人物规模',
+      label: '人物数量',
       required: false,
       options: [
-        { value: 'compact', label: '精简' },
-        { value: 'standard', label: '标准' },
-        { value: 'rich', label: '丰满' },
+        { value: 'compact', label: '少量' },
+        { value: 'standard', label: '适中' },
+        { value: 'rich', label: '较多' },
       ],
     },
     {

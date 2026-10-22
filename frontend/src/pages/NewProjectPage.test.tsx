@@ -60,7 +60,7 @@ describe('NewProjectPage 问卷向导', () => {
     await userEvent.click(screen.getByRole('button', { name: '中篇' }));
     await userEvent.click(screen.getByRole('button', { name: '热血' }));
     await userEvent.click(screen.getByRole('button', { name: '第三人称限知' }));
-    await userEvent.click(screen.getByRole('button', { name: '标准' }));
+    await userEvent.click(screen.getByRole('button', { name: '适中' }));
     await userEvent.click(screen.getByRole('button', { name: '天赋' }));
     await userEvent.click(screen.getByRole('button', { name: /创建项目/ }));
 
@@ -79,17 +79,17 @@ describe('NewProjectPage 问卷向导', () => {
   it('切换类型时保留必答已填值、清空上一类型级联选答', async () => {
     await gotoStep2();
     await userEvent.click(screen.getByRole('button', { name: '中篇' }));
-    await userEvent.click(screen.getByRole('button', { name: '标准' }));
+    await userEvent.click(screen.getByRole('button', { name: '适中' }));
 
     // 返回第一步换类型
     await userEvent.click(screen.getByText('返回更改'));
     await userEvent.click(screen.getByRole('button', { name: /悬疑/ }));
     await screen.findByText('创作意图');
 
-    // 必答（篇幅）保留；级联选答（人物规模）被清空
+    // 必答（篇幅）保留；级联选答（人物数量）被清空
     expect(screen.getByRole('button', { name: '中篇' }).getAttribute('aria-pressed')).toBe('true');
     const rail = screen.getByRole('complementary');
-    expect(rail.textContent).toContain('人物规模');
+    expect(rail.textContent).toContain('人物数量');
     expect(rail.textContent).toContain('未回答');
   });
 });

@@ -11,7 +11,7 @@ import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.
 import { renderUpstreamContext } from '../prompts/upstream-context.js';
 import { charactersV1 } from '../prompts/characters-template.js';
 
-/** 问卷「人物规模」选答到人数的映射 */
+/** 问卷「人物数量」选答到人数的映射 */
 const SCALE_COUNTS: Record<string, number> = {
   compact: 3,
   standard: 4,

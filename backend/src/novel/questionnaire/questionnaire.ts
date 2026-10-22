@@ -29,7 +29,13 @@ export interface QuestionnaireDefinition {
 
 export class MissingRequiredAnswersError extends Error {
   constructor(readonly missing: string[]) {
-    super(`问卷缺少必答项: ${missing.join(', ')}`);
+    const labels: Record<string, string> = {
+      genre: '类型',
+      length: '篇幅',
+      tone: '基调',
+      pov: '叙事视角',
+    };
+    super(`还需填写：${missing.map((field) => labels[field] ?? field).join('、')}`);
     this.name = 'MissingRequiredAnswersError';
   }
 }
@@ -62,15 +68,15 @@ export class QuestionnaireService {
       },
     ];
 
-    // 选答：人物规模（默认按篇幅配置，可在此覆盖）
+    // 选答：人物数量（默认按篇幅配置，可在此覆盖）
     questions.push({
       key: 'extras.characterScale',
-      label: '人物规模',
+      label: '人物数量',
       required: false,
       options: [
-        { value: 'compact', label: '精简' },
-        { value: 'standard', label: '标准' },
-        { value: 'rich', label: '丰满' },
+        { value: 'compact', label: '少量' },
+        { value: 'standard', label: '适中' },
+        { value: 'rich', label: '较多' },
       ],
     });
 
