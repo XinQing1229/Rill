@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
+  LENGTHS,
+  LENGTH_LABELS,
   POVS,
   QUESTIONNAIRE_VERSION,
   QuestionnaireAnswers,
@@ -40,7 +42,12 @@ export class QuestionnaireService {
 
     const questions: Question[] = [
       { key: 'genre', label: '类型', required: true, options: [] },
-      { key: 'length', label: '篇幅', required: true, options: [] },
+      {
+        key: 'length',
+        label: '篇幅',
+        required: true,
+        options: LENGTHS.map((length) => ({ value: length, label: LENGTH_LABELS[length] })),
+      },
       {
         key: 'tone',
         label: '基调',
