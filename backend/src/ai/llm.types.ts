@@ -6,6 +6,7 @@ export interface ChatMessage {
 }
 
 export interface CompleteOptions {
+  signal?: AbortSignal;
   /** 模型用途，决定模型与参数；默认 draft */
   usage?: 'draft' | 'reasoning';
   /** 外部传入的追踪标识；不传则自动生成 */

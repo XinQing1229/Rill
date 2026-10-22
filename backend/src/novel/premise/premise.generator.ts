@@ -1,3 +1,4 @@
+import { commitGeneration } from '../pipeline/execution-context.js';
 import { Injectable } from '@nestjs/common';
 import { Premise, PremiseSchema, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
@@ -29,9 +30,7 @@ export class PremiseGenerator implements StageGenerator {
   ) {
     this.prompts.register(premiseV1);
     this.artifacts.registerGenerator(this);
-    this.artifacts.register('premise', async (projectId, stale) => {
-      await this.prisma.premise.updateMany({ where: { projectId }, data: { stale } });
-    });
+    this.artifacts.registerStorage('premise', this.prisma);
   }
 
   async generate(
@@ -59,30 +58,25 @@ export class PremiseGenerator implements StageGenerator {
     );
 
     const usage = this.usageRecorder.get(traceId);
-    await this.prisma.premise.update({
-      where: { projectId },
-      data: {
-        data: JSON.stringify(premise),
-        stale: false,
-        promptTokens: usage?.promptTokens ?? 0,
-        completionTokens: usage?.completionTokens ?? 0,
-      },
-    });
+    await commitGeneration(this.prisma, async (tx) => {
+      await tx.premise.update({
+        where: { projectId },
+        data: {
+          data: JSON.stringify(premise),
+          stale: false,
+          promptTokens: usage?.promptTokens ?? 0,
+          completionTokens: usage?.completionTokens ?? 0,
+        },
+      });
 
-    await this.recordProjectUsage(projectId, usage);
-  }
-
-  private async recordProjectUsage(
-    projectId: string,
-    usage: { promptTokens: number; completionTokens: number } | undefined,
-  ): Promise<void> {
-    if (!usage) return;
-    await this.prisma.project.update({
-      where: { id: projectId },
-      data: {
-        promptTokens: { increment: usage.promptTokens },
-        completionTokens: { increment: usage.completionTokens },
-      },
+      if (usage)
+        await tx.project.update({
+          where: { id: projectId },
+          data: {
+            promptTokens: { increment: usage.promptTokens },
+            completionTokens: { increment: usage.completionTokens },
+          },
+        });
     });
   }
 }

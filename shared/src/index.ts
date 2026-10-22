@@ -421,7 +421,15 @@ export interface GenerateResponse {
 }
 
 /** GET /api/novel/projects/:id 响应：项目详情 + 各阶段产物行 + 完整阶段列表 */
+export interface StageExecutionState {
+  status: ArtifactStatus;
+  stale: boolean;
+  error: string | null;
+  confirmedAt: string | null;
+}
+
 export interface ProjectDetail {
+  stageStates?: Partial<Record<Stage, StageExecutionState>>;
   id: string;
   title: string;
   genre: Genre;

@@ -57,6 +57,9 @@ function setup() {
     worldSetting: { upsert },
     project: { update: projectUpdate },
   } as unknown as PrismaService;
+  prisma.$transaction = jest.fn(async (write: unknown) =>
+    (write as (tx: PrismaService) => Promise<void>)(prisma),
+  ) as unknown as PrismaService['$transaction'];
   const artifacts = new ArtifactRegistry();
   const generator = new WorldGenerator(llm, prompts, usage, prisma, artifacts);
 

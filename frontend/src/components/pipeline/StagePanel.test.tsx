@@ -12,6 +12,32 @@ import {
 const noop = () => {};
 
 describe('StagePanel 状态分流', () => {
+  it('首次失败没有产物时展示独立阶段错误', () => {
+    const project = makeProject({
+      characters: [],
+      stageStates: {
+        characters: {
+          status: 'failed',
+          stale: false,
+          error: '人物服务暂不可用',
+          confirmedAt: null,
+        },
+      },
+    });
+    render(
+      <StagePanel
+        project={project}
+        stage="characters"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
+    );
+    expect(screen.getByText('人物服务暂不可用')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新生成' })).toBeInTheDocument();
+  });
+
   it('上游未就绪时阻止生成并说明原因', () => {
     const project = makeProject(); // premise pending → world 阻塞
     render(

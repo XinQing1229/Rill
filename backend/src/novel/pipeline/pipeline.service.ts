@@ -1,3 +1,4 @@
+import { executionContext } from './execution-context.js';
 import {
   BadRequestException,
   ConflictException,
@@ -6,6 +7,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import type { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import { ArtifactStatus, PipelineMode, QuestionnaireAnswers, Stage } from '@rill/shared';
@@ -57,10 +59,14 @@ export class PipelineService implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
+    await this.prisma.stageRun.updateMany({
+      where: { status: 'generating' },
+      data: { status: 'failed', error: '服务重启中断了生成，请重试' },
+    });
     // 释放被中断的运行锁：执行进度仍保留在 checkpointer，再次触发即从中断处继续
     const result = await this.prisma.project.updateMany({
       where: { status: 'running' },
-      data: { status: 'failed' },
+      data: { status: 'failed', runId: null },
     });
     if (result.count > 0) {
       this.logger.warn(
@@ -100,12 +106,45 @@ export class PipelineService implements OnModuleInit {
   async get(id: string) {
     const project = await this.prisma.project.findUnique({
       where: { id },
-      include: { premise: true, world: true, characters: true, relations: true },
+      include: {
+        premise: true,
+        world: true,
+        characters: true,
+        relations: true,
+        stageRuns: { orderBy: { updatedAt: 'desc' } },
+      },
     });
     if (!project) throw new NotFoundException(`项目不存在: ${id}`);
     // 附加该类型的完整阶段列表：前端时间轴与上游判断共用一份事实来源
     return {
       ...project,
+      stageStates: Object.fromEntries(
+        stagesFor(project.genre as QuestionnaireAnswers['genre']).map((stage) => {
+          const state = this.assembler.readStageState(project, stage);
+          const execution = project.stageRuns.find((run) => run.stage === stage);
+          return [
+            stage,
+            state
+              ? {
+                  ...state,
+                  error: execution?.error ?? null,
+                  confirmedAt: execution?.confirmedAt ?? null,
+                }
+              : {
+                  status:
+                    project.status === 'failed' && project.currentStage === stage
+                      ? 'failed'
+                      : 'pending',
+                  stale: false,
+                  error:
+                    project.status === 'failed' && project.currentStage === stage
+                      ? '此前生成被中断，请重试'
+                      : null,
+                  confirmedAt: null,
+                },
+          ];
+        }),
+      ),
       stages: stagesFor(project.genre as QuestionnaireAnswers['genre']),
     };
   }
@@ -140,21 +179,6 @@ export class PipelineService implements OnModuleInit {
     const stage = project.currentStage as Stage;
     const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
 
-    // 自动模式且项目空闲/失败（失败续跑）：后台启动连续推进
-    if (
-      project.mode === 'auto' &&
-      !options.autoChain &&
-      ['idle', 'failed'].includes(project.status)
-    ) {
-      void this.runAuto(id).catch(() => undefined);
-      return {
-        stage,
-        status: 'generating' as ArtifactStatus,
-        started: true,
-        auto: true,
-      };
-    }
-
     if (project.status === 'running') {
       throw new ConflictException('该项目有生成任务正在进行，请勿重复触发');
     }
@@ -165,23 +189,37 @@ export class PipelineService implements OnModuleInit {
       return { stage, status: artifactState.status, started: false };
     }
 
-    if (options.force) {
-      // 打破幂等，使该阶段重新生成（下游失效由节点内统一处理）；
-      // 同时清除中断点，否则会恢复到下一阶段而不是重跑本阶段
-      await this.artifacts.setStale(stage, id, true);
-      await this.checkpointer.deleteThread(id);
+    const runId = await this.acquireRun(project);
+    try {
+      if (options.force) {
+        // 打破幂等，使该阶段重新生成（下游失效由节点内统一处理）；
+        // 同时清除中断点，否则会恢复到下一阶段而不是重跑本阶段
+        await this.artifacts.setStale(stage, id, true);
+        await this.checkpointer.deleteThread(id);
+      }
+    } catch (error) {
+      await this.prisma.project.updateMany({
+        where: { id, runId },
+        data: { status: 'failed', runId: null },
+      });
+      throw error;
     }
 
-    await this.prisma.project.update({ where: { id }, data: { status: 'running' } });
-
-    const task = this.runGraph(id, answers, project.mode as PipelineMode, stage);
+    const task = this.runGraph(id, answers, project.mode as PipelineMode, stage).finally(() =>
+      this.releaseRun(id, runId),
+    );
     if (options.wait) {
       await task;
     } else {
       void task.catch(() => undefined);
     }
 
-    return { stage, status: 'generating' as ArtifactStatus, started: true };
+    return {
+      stage,
+      status: 'generating' as ArtifactStatus,
+      started: true,
+      auto: project.mode === 'auto',
+    };
   }
 
   /** 手动模式：确认当前阶段后恢复图，推进到下一阶段 */
@@ -201,17 +239,38 @@ export class PipelineService implements OnModuleInit {
       throw new ConflictException('该项目有生成任务正在进行，请勿重复触发');
     }
 
-    if (action === 'regenerate') {
-      // 重新生成：使本阶段失效，并清除中断点，使图从本阶段重新开始
-      await this.artifacts.setStale(stage, id, true);
-      await this.checkpointer.deleteThread(id);
+    const runId = await this.acquireRun(project);
+    try {
+      if (action === 'regenerate') {
+        // 重新生成：使本阶段失效，并清除中断点，使图从本阶段重新开始
+        await this.artifacts.setStale(stage, id, true);
+        await this.checkpointer.deleteThread(id);
+      }
+
+      if (action === 'confirm')
+        await this.prisma.stageRun.updateMany({
+          where: { projectId: id, stage, stale: false, status: 'done' },
+          data: { confirmedAt: new Date() },
+        });
+      const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
+      let startStage = stage;
+      if (
+        action === 'confirm' &&
+        !(await this.checkpointer.getTuple({ configurable: { thread_id: id } }))
+      ) {
+        const stages = stagesFor(answers.genre);
+        const next = stages[stages.indexOf(stage) + 1];
+        if (!next) {
+          await this.prisma.project.update({ where: { id }, data: { status: 'done' } });
+          return this.get(id);
+        }
+        startStage = next;
+      }
+      await this.runGraph(id, answers, project.mode as PipelineMode, startStage);
+      return this.get(id);
+    } finally {
+      await this.releaseRun(id, runId);
     }
-
-    const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
-    await this.prisma.project.update({ where: { id }, data: { status: 'running' } });
-
-    await this.runGraph(id, answers, project.mode as PipelineMode, stage);
-    return this.get(id);
   }
 
   /** 回退到指定阶段，并把其之后的阶段产物标记为失效 */
@@ -222,24 +281,37 @@ export class PipelineService implements OnModuleInit {
       throw new BadRequestException(`该类型不支持阶段: ${stage}`);
     }
 
-    await markDownstreamStale(
-      this.artifacts,
-      id,
-      stage,
-      project.genre as QuestionnaireAnswers['genre'],
-    );
-    // 清除执行快照，使下次启动从入口路由按新的 currentStage 开始
-    await this.checkpointer.deleteThread(id);
-    await this.prisma.project.update({
-      where: { id },
-      data: { currentStage: stage, status: 'idle' },
-    });
-    return this.get(id);
+    if (project.status === 'running') throw new ConflictException('项目正在运行，请稍后回退');
+    const target = this.assembler.readStageState(project, stage);
+    if (target?.status !== 'done') throw new BadRequestException('只能回退到已完成阶段');
+
+    const runId = await this.acquireRun(project);
+    try {
+      await markDownstreamStale(
+        this.artifacts,
+        id,
+        stage,
+        project.genre as QuestionnaireAnswers['genre'],
+      );
+      // 清除执行快照，使下次启动从入口路由按新的 currentStage 开始
+      await this.checkpointer.deleteThread(id);
+      await this.prisma.project.update({
+        where: { id },
+        data: { currentStage: stage, status: 'idle' },
+      });
+      return this.get(id);
+    } finally {
+      await this.releaseRun(id, runId);
+    }
   }
 
   async setMode(id: string, mode: PipelineMode) {
-    await this.get(id);
-    await this.prisma.project.update({ where: { id }, data: { mode } });
+    const project = await this.get(id);
+    const result = await this.prisma.project.updateMany({
+      where: { id, status: { not: 'running' }, runId: null, updatedAt: project.updatedAt },
+      data: { mode },
+    });
+    if (result.count !== 1) throw new ConflictException('项目正在运行或已变更，请刷新后重试');
     return this.get(id);
   }
 
@@ -266,17 +338,32 @@ export class PipelineService implements OnModuleInit {
    * 再次启动从 checkpointer 记录的中断处继续。
    */
   async runAuto(id: string) {
-    const project = await this.get(id);
-    const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
-
-    await this.prisma.project.update({ where: { id }, data: { status: 'running' } });
-    try {
-      await this.runGraph(id, answers, 'auto', project.currentStage as Stage);
-    } catch (error) {
-      await this.prisma.project.update({ where: { id }, data: { status: 'failed' } });
-      throw error;
-    }
+    await this.generate(id, { autoChain: true, wait: true });
     return this.get(id);
+  }
+
+  /** 所有改变执行位置的入口都必须原子领取运行权。 */
+  private async acquireRun(project: { id: string; updatedAt: Date }): Promise<string> {
+    const runId = randomUUID();
+    const result = await this.prisma.project.updateMany({
+      where: {
+        id: project.id,
+        updatedAt: project.updatedAt,
+        status: { not: 'running' },
+        runId: null,
+      },
+      data: { status: 'running', runId },
+    });
+    if (result.count !== 1) throw new ConflictException('项目正在运行或已变更，请刷新后重试');
+    return runId;
+  }
+
+  private async releaseRun(id: string, runId: string): Promise<void> {
+    await this.prisma.project.updateMany({
+      where: { id, runId, status: 'running' },
+      data: { status: 'failed' },
+    });
+    await this.prisma.project.updateMany({ where: { id, runId }, data: { runId: null } });
   }
 
   /**
@@ -289,11 +376,29 @@ export class PipelineService implements OnModuleInit {
     mode: PipelineMode,
     fallbackStage: Stage,
   ): Promise<void> {
+    const owner = await this.prisma.project.findUniqueOrThrow({ where: { id } });
+    const runId = owner.runId!;
+    const controller = new AbortController();
     const stages = stagesFor(answers.genre);
     const graph = compilePipelineGraph({
       stages,
       runner: this.runner,
-      checkpointer: this.checkpointer,
+      checkpointer: new Proxy(this.checkpointer, {
+        get: (target, property) => {
+          const method = Reflect.get(target, property);
+          if (property === 'put' || property === 'putWrites') {
+            return async (...args: unknown[]) => {
+              controller.signal.throwIfAborted();
+              const current = await this.prisma.project.findUnique({ where: { id } });
+              if (current?.runId !== runId || current.status !== 'running')
+                throw new Error('运行已失效，拒绝写入快照');
+              controller.signal.throwIfAborted();
+              return Reflect.apply(method, target, args);
+            };
+          }
+          return typeof method === 'function' ? method.bind(target) : method;
+        },
+      }),
       mode,
       skipStages: profileFor(answers.genre).skipStages,
     });
@@ -313,20 +418,28 @@ export class PipelineService implements OnModuleInit {
 
     try {
       const outcome = await Promise.race([
-        graph.invoke(input, config).then((state) => ({ kind: 'state' as const, state })),
+        executionContext
+          .run({ projectId: id, runId, signal: controller.signal }, () =>
+            graph.invoke(input, { ...config, signal: controller.signal }),
+          )
+          .then((state) => ({ kind: 'state' as const, state })),
         timeout,
       ]);
 
       if (outcome === TIMEOUT_MARK) {
+        controller.abort();
         const message = `生成超时（超过 ${Math.round(this.generationTimeoutMs / 60000)} 分钟），已中止并标记失败`;
         await this.failProject(id, fallbackStage, message);
         throw new Error(message);
       }
 
       // 同步执行进度（冗余写入，便于查询与前端展示）
-      await this.prisma.project.update({
-        where: { id },
-        data: { currentStage: outcome.state.currentStage ?? fallbackStage, status: 'idle' },
+      await this.prisma.project.updateMany({
+        where: { id, runId },
+        data: {
+          currentStage: outcome.state.currentStage ?? fallbackStage,
+          status: outcome.state.currentStage === stages.at(-1) ? 'done' : 'idle',
+        },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -344,7 +457,13 @@ export class PipelineService implements OnModuleInit {
   private async failProject(id: string, fallbackStage: Stage, message?: string): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id },
-      include: { premise: true, world: true, characters: true, relations: true },
+      include: {
+        premise: true,
+        world: true,
+        characters: true,
+        relations: true,
+        stageRuns: { orderBy: { updatedAt: 'desc' } },
+      },
     });
     if (!project) return;
     const stage = (project.currentStage ?? fallbackStage) as Stage;

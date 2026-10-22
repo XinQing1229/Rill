@@ -1,3 +1,5 @@
+import { storageFor } from './stage-storage.js';
+import { commitGeneration, executionContext } from './execution-context.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ArtifactStatus, QuestionnaireAnswers, Stage } from '@rill/shared';
 import { PrismaService } from '../prisma.service.js';
@@ -20,16 +22,17 @@ export async function setStageStatus(
   status: ArtifactStatus,
   error?: string,
 ): Promise<void> {
-  const data = { status, error: error ?? null };
-  if (stage === 'premise') {
-    await prisma.premise.updateMany({ where: { projectId }, data });
-  } else if (stage === 'world') {
-    await prisma.worldSetting.updateMany({ where: { projectId }, data });
-  } else if (stage === 'characters') {
-    await prisma.character.updateMany({ where: { projectId }, data });
-  } else if (stage === 'relations') {
-    await prisma.relation.updateMany({ where: { projectId }, data });
-  }
+  await commitGeneration(prisma, async (tx) => {
+    executionContext.getStore()?.signal.throwIfAborted();
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
+    const runId = project.runId ?? 'legacy';
+    await tx.stageRun.upsert({
+      where: { projectId_runId_stage: { projectId, runId, stage } },
+      create: { projectId, runId, stage, status, error: error ?? null },
+      update: { status, error: error ?? null, ...(status === 'done' ? { stale: false } : {}) },
+    });
+    await storageFor(stage)?.write(tx, projectId, { status, error: error ?? null });
+  });
 }
 
 /** 重新生成某阶段时，其下游产物一律标记失效 */
@@ -54,9 +57,16 @@ export async function markDownstreamStale(
  */
 export function createStageRunner(deps: StageRunnerDeps): StageRunner {
   return async (state: PipelineState, stage: Stage) => {
+    executionContext.getStore()?.signal.throwIfAborted();
     const project = await deps.prisma.project.findUnique({
       where: { id: state.projectId },
-      include: { premise: true, world: true, characters: true, relations: true },
+      include: {
+        premise: true,
+        world: true,
+        characters: true,
+        relations: true,
+        stageRuns: { orderBy: { updatedAt: 'desc' } },
+      },
     });
     if (!project) throw new NotFoundException(`项目不存在: ${state.projectId}`);
 
@@ -65,9 +75,8 @@ export function createStageRunner(deps: StageRunnerDeps): StageRunner {
     if (stageState?.status === 'done' && !stageState.stale) return { currentStage: stage };
 
     // 记录正在处理的阶段：失败时也停在该阶段，续跑不会退回上一阶段
-    await deps.prisma.project.update({
-      where: { id: state.projectId },
-      data: { currentStage: stage },
+    await commitGeneration(deps.prisma, async (tx) => {
+      await tx.project.update({ where: { id: state.projectId }, data: { currentStage: stage } });
     });
 
     const generator = deps.artifacts.getGenerator(stage);

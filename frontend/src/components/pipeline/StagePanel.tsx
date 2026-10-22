@@ -197,7 +197,7 @@ export function StagePanel({ project, stage, busy, onGenerate, onConfirm, onRoll
                   ? project.world
                   : (project.characters.find((item) => item.error !== null) ??
                     project.relations.find((item) => item.error !== null));
-            return row?.error ?? '未知错误';
+            return project.stageStates?.[stage]?.error ?? row?.error ?? '未知错误';
           })()}
           style={{ marginBottom: 12 }}
         />

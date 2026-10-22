@@ -29,7 +29,9 @@ function makeState(overrides: Partial<PipelineState> = {}): PipelineState {
 
 function makeDeps(overrides: Partial<StageRunnerDeps> = {}): StageRunnerDeps {
   const prisma = {
+    stageRun: { upsert: jest.fn().mockResolvedValue({}) },
     project: {
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ runId: 'test' }),
       findUnique: jest.fn().mockResolvedValue({ id: 'project-1' }),
       update: jest.fn().mockResolvedValue({ id: 'project-1' }),
     },
@@ -38,6 +40,9 @@ function makeDeps(overrides: Partial<StageRunnerDeps> = {}): StageRunnerDeps {
     character: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     relation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   };
+  Object.assign(prisma, {
+    $transaction: async (write: (tx: typeof prisma) => Promise<void>) => write(prisma),
+  });
   const assembler = {
     readStageState: jest.fn().mockReturnValue({ status: 'pending', stale: false }),
     assemble: jest.fn().mockResolvedValue({} as StageContext),

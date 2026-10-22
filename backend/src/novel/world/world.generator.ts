@@ -1,3 +1,4 @@
+import { commitGeneration } from '../pipeline/execution-context.js';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { QuestionnaireAnswers, Stage, StageContext, worldSchemaFor } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
@@ -24,9 +25,7 @@ export class WorldGenerator implements StageGenerator {
   ) {
     this.prompts.register(worldV1);
     this.artifacts.registerGenerator(this);
-    this.artifacts.register('world', async (projectId, stale) => {
-      await this.prisma.worldSetting.updateMany({ where: { projectId }, data: { stale } });
-    });
+    this.artifacts.registerStorage('world', this.prisma);
   }
 
   async generate(
@@ -80,26 +79,21 @@ export class WorldGenerator implements StageGenerator {
       completionTokens: usage?.completionTokens ?? 0,
     };
 
-    await this.prisma.worldSetting.upsert({
-      where: { projectId },
-      update: payload,
-      create: { projectId, ...payload },
-    });
+    await commitGeneration(this.prisma, async (tx) => {
+      await tx.worldSetting.upsert({
+        where: { projectId },
+        update: payload,
+        create: { projectId, ...payload },
+      });
 
-    await this.recordProjectUsage(projectId, usage);
-  }
-
-  private async recordProjectUsage(
-    projectId: string,
-    usage: { promptTokens: number; completionTokens: number } | undefined,
-  ): Promise<void> {
-    if (!usage) return;
-    await this.prisma.project.update({
-      where: { id: projectId },
-      data: {
-        promptTokens: { increment: usage.promptTokens },
-        completionTokens: { increment: usage.completionTokens },
-      },
+      if (usage)
+        await tx.project.update({
+          where: { id: projectId },
+          data: {
+            promptTokens: { increment: usage.promptTokens },
+            completionTokens: { increment: usage.completionTokens },
+          },
+        });
     });
   }
 }

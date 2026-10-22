@@ -89,6 +89,11 @@ function setup() {
     project: { update: projectUpdate },
     $transaction: transaction,
   } as unknown as PrismaService;
+  transaction.mockImplementation(async (write: unknown) =>
+    (write as (tx: PrismaService) => Promise<void>)(prisma),
+  );
+  prisma.$transaction = transaction;
+
   const artifacts = new ArtifactRegistry();
   const generator = new RelationGenerator(llm, prompts, usage, prisma, artifacts);
 

@@ -1,3 +1,4 @@
+import { commitGeneration } from './execution-context.js';
 // ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
 const jest = import.meta.jest;
 
@@ -104,6 +105,71 @@ describe('PipelineService', () => {
     expect(full.mode).toBe('manual');
   });
 
+  it('无产物的阶段失败保留错误，空集合成功可确认', async () => {
+    const project = await service.create({ title: '阶段状态', answers });
+    await service.generate(project.id, { wait: true });
+    artifacts.registerGenerator(
+      fakeGenerator('world', [], async () => {
+        throw new Error('首次失败');
+      }),
+    );
+    await expect(service.confirm(project.id)).rejects.toThrow('首次失败');
+    expect((await service.get(project.id)).stageStates.world).toMatchObject({
+      status: 'failed',
+      error: '首次失败',
+    });
+    artifacts.registerGenerator(fakeGenerator('world'));
+    await service.generate(project.id, { wait: true });
+    expect((await service.get(project.id)).stageStates.world.status).toBe('done');
+    artifacts.registerGenerator(fakeGenerator('characters'));
+    await service.confirm(project.id);
+    expect((await service.get(project.id)).currentStage).toBe('characters');
+  });
+
+  it('超时后迟到的产物提交被拒绝', async () => {
+    const project = await service.create({ title: '迟到任务', answers });
+    let release!: () => void;
+    let finished!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      finished = resolve;
+    });
+    premiseGenerate.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      try {
+        await commitGeneration(prisma, async (tx) => {
+          await tx.project.update({ where: { id: project.id }, data: { title: '旧结果' } });
+        });
+      } finally {
+        finished();
+      }
+    });
+    (service as unknown as { generationTimeoutMs: number }).generationTimeoutMs = 50;
+    await expect(service.generate(project.id, { wait: true })).rejects.toThrow(/超时/);
+    await service.generate(project.id, { wait: true });
+    release();
+    await settled;
+    expect((await service.get(project.id)).title).toBe('迟到任务');
+    expect((await service.get(project.id)).status).toBe('idle');
+  });
+
+  it('回退清除快照后一次确认进入下一阶段', async () => {
+    const project = await service.create({ title: '回退确认', answers });
+    artifacts.registerGenerator(fakeGenerator('world'));
+    await service.generate(project.id, { wait: true });
+    await service.confirm(project.id);
+    await service.rollback(project.id, 'premise');
+    await service.confirm(project.id);
+    expect((await service.get(project.id)).currentStage).toBe('world');
+  });
+
+  it('不能回退到尚未完成的阶段', async () => {
+    const project = await service.create({ title: '未完成回退', answers });
+    await expect(service.rollback(project.id, 'world')).rejects.toThrow('只能回退到已完成阶段');
+    expect((await service.get(project.id)).currentStage).toBe('premise');
+  });
+
   it('必答项缺失时创建失败', async () => {
     await expect(
       service.create({ title: 'x', answers: { genre: 'xuanhuan' } as QuestionnaireAnswers }),
@@ -150,6 +216,37 @@ describe('PipelineService', () => {
     await expect(service.generate(project.id)).rejects.toThrow(ConflictException);
 
     release();
+  });
+
+  it('同时请求生成时只有一个任务能领取运行权', async () => {
+    const project = await service.create({ title: '并发测试', answers });
+    let release!: () => void;
+    let started!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    premiseGenerate.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+          started();
+        }),
+    );
+    const results = await Promise.allSettled([
+      service.generate(project.id),
+      service.generate(project.id),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    await entered;
+    expect(premiseGenerate).toHaveBeenCalledTimes(1);
+    await expect(service.rollback(project.id, 'premise')).rejects.toThrow(ConflictException);
+    await expect(service.setMode(project.id, 'auto')).rejects.toThrow(ConflictException);
+    release();
+    for (let i = 0; i < 100; i += 1) {
+      if ((await service.get(project.id)).runId === null) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
   });
 
   it('生成超时后把阶段与项目标记为失败，项目不会卡在 running', async () => {

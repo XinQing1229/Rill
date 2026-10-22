@@ -1,3 +1,4 @@
+import { commitGeneration } from '../pipeline/execution-context.js';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { QuestionnaireAnswers, RelationListSchema, Stage, StageContext } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
@@ -32,9 +33,7 @@ export class RelationGenerator implements StageGenerator {
   ) {
     this.prompts.register(relationsV1);
     this.artifacts.registerGenerator(this);
-    this.artifacts.register('relations', async (projectId, stale) => {
-      await this.prisma.relation.updateMany({ where: { projectId }, data: { stale } });
-    });
+    this.artifacts.registerStorage('relations', this.prisma);
   }
 
   async generate(
@@ -65,23 +64,32 @@ export class RelationGenerator implements StageGenerator {
     const promptTokens = usage?.promptTokens ?? 0;
     const completionTokens = usage?.completionTokens ?? 0;
 
-    await this.prisma.$transaction([
-      this.prisma.relation.deleteMany({ where: { projectId } }),
-      ...[...normalized.values()].map((relation) =>
-        this.prisma.relation.create({
-          data: {
-            projectId,
-            ...relation,
-            status: 'done',
-            stale: false,
-            promptTokens,
-            completionTokens,
-          },
-        }),
-      ),
-    ]);
+    await commitGeneration(this.prisma, async (tx) => {
+      await Promise.all([
+        tx.relation.deleteMany({ where: { projectId } }),
+        ...[...normalized.values()].map((relation) =>
+          tx.relation.create({
+            data: {
+              projectId,
+              ...relation,
+              status: 'done',
+              stale: false,
+              promptTokens,
+              completionTokens,
+            },
+          }),
+        ),
+      ]);
 
-    await this.recordProjectUsage(projectId, usage);
+      if (usage)
+        await tx.project.update({
+          where: { id: projectId },
+          data: {
+            promptTokens: { increment: usage.promptTokens },
+            completionTokens: { increment: usage.completionTokens },
+          },
+        });
+    });
   }
 
   /**
@@ -139,19 +147,5 @@ export class RelationGenerator implements StageGenerator {
     }
 
     return result;
-  }
-
-  private async recordProjectUsage(
-    projectId: string,
-    usage: { promptTokens: number; completionTokens: number } | undefined,
-  ): Promise<void> {
-    if (!usage) return;
-    await this.prisma.project.update({
-      where: { id: projectId },
-      data: {
-        promptTokens: { increment: usage.promptTokens },
-        completionTokens: { increment: usage.completionTokens },
-      },
-    });
   }
 }

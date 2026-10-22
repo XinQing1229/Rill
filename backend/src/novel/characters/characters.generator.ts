@@ -1,3 +1,4 @@
+import { commitGeneration } from '../pipeline/execution-context.js';
 import { Injectable } from '@nestjs/common';
 import { CharacterListSchema, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
@@ -34,9 +35,7 @@ export class CharacterGenerator implements StageGenerator {
     this.prompts.register(charactersV1);
     this.artifacts.registerGenerator(this);
     // 重新生成人物 → 关系失效
-    this.artifacts.register('characters', async (projectId, stale) => {
-      await this.prisma.character.updateMany({ where: { projectId }, data: { stale } });
-    });
+    this.artifacts.registerStorage('characters', this.prisma);
   }
 
   async generate(
@@ -70,25 +69,34 @@ export class CharacterGenerator implements StageGenerator {
     const promptTokens = usage?.promptTokens ?? 0;
     const completionTokens = usage?.completionTokens ?? 0;
 
-    await this.prisma.$transaction([
-      this.prisma.character.deleteMany({ where: { projectId } }),
-      ...characters.map((item) =>
-        this.prisma.character.create({
-          data: {
-            projectId,
-            name: String(item.name),
-            role: String(item.role),
-            data: JSON.stringify(item),
-            status: 'done',
-            stale: false,
-            promptTokens,
-            completionTokens,
-          },
-        }),
-      ),
-    ]);
+    await commitGeneration(this.prisma, async (tx) => {
+      await Promise.all([
+        tx.character.deleteMany({ where: { projectId } }),
+        ...characters.map((item) =>
+          tx.character.create({
+            data: {
+              projectId,
+              name: String(item.name),
+              role: String(item.role),
+              data: JSON.stringify(item),
+              status: 'done',
+              stale: false,
+              promptTokens,
+              completionTokens,
+            },
+          }),
+        ),
+      ]);
 
-    await this.recordProjectUsage(projectId, usage);
+      if (usage)
+        await tx.project.update({
+          where: { id: projectId },
+          data: {
+            promptTokens: { increment: usage.promptTokens },
+            completionTokens: { increment: usage.completionTokens },
+          },
+        });
+    });
   }
 
   private resolveCount(answers: QuestionnaireAnswers, profile: GenreProfile): number {
@@ -97,19 +105,5 @@ export class CharacterGenerator implements StageGenerator {
       return SCALE_COUNTS[scale];
     }
     return profile.characterCount[answers.length];
-  }
-
-  private async recordProjectUsage(
-    projectId: string,
-    usage: { promptTokens: number; completionTokens: number } | undefined,
-  ): Promise<void> {
-    if (!usage) return;
-    await this.prisma.project.update({
-      where: { id: projectId },
-      data: {
-        promptTokens: { increment: usage.promptTokens },
-        completionTokens: { increment: usage.completionTokens },
-      },
-    });
   }
 }

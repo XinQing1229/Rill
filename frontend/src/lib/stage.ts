@@ -27,6 +27,7 @@ function aggregate(rows: Array<{ status: string; stale: boolean }>): StageState 
 
 /** 读取某阶段的聚合产物状态；1:1 直读，1:N 按行聚合（任一 stale 即视为失效） */
 export function readStageState(project: ProjectDetail, stage: Stage): StageState | undefined {
+  if (project.stageStates?.[stage]) return project.stageStates[stage];
   if (stage === 'premise') {
     return project.premise
       ? { status: project.premise.status, stale: project.premise.stale }

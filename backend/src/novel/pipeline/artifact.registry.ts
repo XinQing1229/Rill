@@ -1,3 +1,6 @@
+import { storageFor, contextFor } from './stage-storage.js';
+import { commitGeneration } from './execution-context.js';
+import type { PrismaService } from '../prisma.service.js';
 import { Injectable } from '@nestjs/common';
 import { Stage, StageContext } from '@rill/shared';
 import { QuestionnaireAnswers } from '@rill/shared';
@@ -28,6 +31,25 @@ export class ArtifactRegistry {
   registerGenerator(generator: StageGenerator): void {
     this.generators.set(generator.stage, generator);
   }
+
+  definition(stage: Stage) {
+    return {
+      storage: storageFor(stage),
+      generator: this.generators.get(stage),
+      invalidate: this.updaters.get(stage),
+    };
+  }
+
+  registerStorage(stage: Stage, prisma: PrismaService): void {
+    this.register(stage, async (projectId, stale) => {
+      await commitGeneration(prisma, async (tx) => {
+        await tx.stageRun.updateMany({ where: { projectId, stage }, data: { stale } });
+        await storageFor(stage)?.invalidate(tx, projectId, stale);
+      });
+    });
+  }
+
+  context = contextFor;
 
   getGenerator(stage: Stage): StageGenerator | undefined {
     return this.generators.get(stage);

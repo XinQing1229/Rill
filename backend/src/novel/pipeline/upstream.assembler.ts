@@ -1,3 +1,4 @@
+import { storageFor } from './stage-storage.js';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ArtifactStatus, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
 import { PrismaService } from '../prisma.service.js';
@@ -22,7 +23,13 @@ export class UpstreamAssembler {
   async assemble(projectId: string, targetStage: Stage): Promise<StageContext> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      include: { premise: true, world: true, characters: true, relations: true },
+      include: {
+        premise: true,
+        world: true,
+        characters: true,
+        relations: true,
+        stageRuns: { orderBy: { updatedAt: 'desc' } },
+      },
     });
     if (!project) throw new NotFoundException(`项目不存在: ${projectId}`);
 
@@ -40,24 +47,13 @@ export class UpstreamAssembler {
       }
     }
 
-    const context: StageContext = {};
-    if (project.premise && project.premise.status === 'done' && !project.premise.stale) {
-      context.premise = JSON.parse(project.premise.data);
-    }
-    if (project.world && project.world.status === 'done' && !project.world.stale) {
-      context.world = JSON.parse(project.world.data);
-    }
-    const characters = project.characters.filter((item) => item.status === 'done' && !item.stale);
-    if (characters.length > 0) {
-      context.characters = characters.map((item) => JSON.parse(item.data));
-    }
-
-    return context;
+    return this.artifacts.context(project);
   }
 
   /** 读取某阶段的聚合状态（1:1 产物直接读；1:N 产物按行聚合） */
   readStageState(
     project: {
+      stageRuns?: Array<{ stage: string; status: string; stale: boolean }>;
       premise?: { status: string; stale: boolean } | null;
       world?: { status: string; stale: boolean } | null;
       characters?: Array<{ status: string; stale: boolean }>;
@@ -65,47 +61,25 @@ export class UpstreamAssembler {
     },
     stage: Stage,
   ): StageState | undefined {
-    if (stage === 'premise') {
-      return project.premise
-        ? { status: project.premise.status as ArtifactStatus, stale: project.premise.stale }
-        : undefined;
-    }
-    if (stage === 'world') {
-      return project.world
-        ? { status: project.world.status as ArtifactStatus, stale: project.world.stale }
-        : undefined;
-    }
-    if (stage === 'characters') {
-      return this.aggregate(project.characters ?? []);
-    }
-    if (stage === 'relations') {
-      return this.aggregate(project.relations ?? []);
-    }
-    return undefined;
-  }
-
-  /**
-   * 聚合 1:N 产物的阶段状态。
-   * stale 与 status 是两个独立维度：stale 表示「上游变动后需重新生成」，
-   * status 表示「产物本身的生成结果」，二者不再互相映射。
-   */
-  private aggregate(rows: Array<{ status: string; stale: boolean }>): StageState | undefined {
-    if (rows.length === 0) return undefined;
-    const anyStale = rows.some((row) => row.stale);
-    const allDone = rows.every((row) => row.status === 'done');
-    const anyFailed = rows.some((row) => row.status === 'failed');
-
-    let status: ArtifactStatus;
-    if (allDone) {
-      status = 'done';
-    } else if (anyFailed) {
-      status = 'failed';
-    } else {
-      // 存在 pending 或混合状态：视作仍在推进中
-      status = 'generating';
-    }
-
-    return { status, stale: anyStale };
+    const execution = project.stageRuns?.find((run) => run.stage === stage);
+    const rows = storageFor(stage)?.rows(project) ?? [];
+    const legacy =
+      rows.length === 0
+        ? undefined
+        : {
+            status: rows.every((row) => row.status === 'done')
+              ? 'done'
+              : rows.some((row) => row.status === 'failed')
+                ? 'failed'
+                : 'generating',
+            stale: rows.some((row) => row.stale),
+          };
+    return execution
+      ? {
+          status: execution.status as ArtifactStatus,
+          stale: execution.stale || legacy?.stale === true,
+        }
+      : (legacy as StageState | undefined);
   }
 
   parseAnswers(answers: string): QuestionnaireAnswers {

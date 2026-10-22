@@ -1,3 +1,4 @@
+import { executionContext } from '../novel/pipeline/execution-context.js';
 import { BadGatewayException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { AI_CONFIG, AiConfig, ModelUsage } from './config/ai.config.js';
 import { ModelRegistry } from './models/model.registry.js';
@@ -63,6 +64,7 @@ export class LlmService implements OnModuleInit {
       const response = await this.runWithRetry(traceId, () =>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolved.model.invoke(messages as any, {
+          signal: options.signal ?? executionContext.getStore()?.signal,
           callbacks: [this.usage.callbacks(traceId, resolved.modelName)],
           ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
         }),
@@ -115,6 +117,7 @@ export class LlmService implements OnModuleInit {
           const result = await this.runWithRetry(traceId, () =>
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             runnable.invoke(currentMessages as any, {
+              signal: options.signal ?? executionContext.getStore()?.signal,
               callbacks: [this.usage.callbacks(traceId, resolved.modelName)],
               ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
             }),
