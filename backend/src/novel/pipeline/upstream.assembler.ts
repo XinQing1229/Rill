@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ArtifactStatus, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
-import { PrismaService } from '../prisma.service';
-import { ArtifactRegistry } from './artifact.registry';
+import { PrismaService } from '../prisma.service.js';
+import { ArtifactRegistry } from './artifact.registry.js';
 
 export interface StageState {
   status: ArtifactStatus;

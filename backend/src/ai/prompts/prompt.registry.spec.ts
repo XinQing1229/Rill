@@ -1,5 +1,5 @@
-import { PromptRegistry, PromptVariableMissingError } from './prompt.registry';
-import { sampleBookV1 } from './templates/sample-book';
+import { PromptRegistry, PromptVariableMissingError } from './prompt.registry.js';
+import { sampleBookV1 } from './templates/sample-book.js';
 
 describe('PromptRegistry', () => {
   let registry: PromptRegistry;

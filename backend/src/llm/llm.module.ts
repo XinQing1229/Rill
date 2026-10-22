@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { AiModule } from '../ai/ai.module';
-import { LlmController } from './llm.controller';
+import { AiModule } from '../ai/ai.module.js';
+import { LlmController } from './llm.controller.js';
 
 @Module({
   imports: [AiModule],

@@ -1,4 +1,4 @@
-import { PromptTemplate } from '../../ai/prompts/prompt.registry';
+import { PromptTemplate } from '../../ai/prompts/prompt.registry.js';
 
 /**
  * 种子阶段提示词模板。

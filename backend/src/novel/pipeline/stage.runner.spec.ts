@@ -1,10 +1,13 @@
+// ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
+const jest = import.meta.jest;
+
 import { BadRequestException } from '@nestjs/common';
 import { QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
-import { PrismaService } from '../prisma.service';
-import { ArtifactRegistry } from './artifact.registry';
-import { UpstreamAssembler } from './upstream.assembler';
-import { createStageRunner, StageRunnerDeps } from './stage.runner';
-import { PipelineState } from './pipeline.graph';
+import { PrismaService } from '../prisma.service.js';
+import { ArtifactRegistry } from './artifact.registry.js';
+import { UpstreamAssembler } from './upstream.assembler.js';
+import { createStageRunner, StageRunnerDeps } from './stage.runner.js';
+import { PipelineState } from './pipeline.graph.js';
 
 const ANSWERS: QuestionnaireAnswers = {
   genre: 'xuanhuan',

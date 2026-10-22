@@ -4,14 +4,14 @@ import path from 'path';
 import { BadRequestException } from '@nestjs/common';
 import { END, START } from '@langchain/langgraph';
 import { QuestionnaireAnswers, Stage } from '@rill/shared';
-import { createCheckpointer } from './checkpointer';
+import { createCheckpointer } from './checkpointer.js';
 import {
   buildPipelineGraph,
   compilePipelineGraph,
   nextStage,
   PipelineState,
   routeEntry,
-} from './pipeline.graph';
+} from './pipeline.graph.js';
 
 function makeAnswers(overrides: Partial<QuestionnaireAnswers> = {}): QuestionnaireAnswers {
   return { genre: 'xuanhuan', length: 'medium', tone: '热血', pov: '第三人称限知', ...overrides };
@@ -202,9 +202,7 @@ describe('未实现阶段的占位节点', () => {
       runner: async () => ({}),
     });
 
-    expect(Object.keys(graph.nodes)).toEqual(
-      expect.arrayContaining(['outline', 'beats', 'prose']),
-    );
+    expect(Object.keys(graph.nodes)).toEqual(expect.arrayContaining(['outline', 'beats', 'prose']));
   });
 
   it('执行到未实现阶段时抛出尚未实现而非崩溃', async () => {

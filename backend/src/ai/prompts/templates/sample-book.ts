@@ -1,4 +1,4 @@
-import { PromptTemplate } from '../prompt.registry';
+import { PromptTemplate } from '../prompt.registry.js';
 
 /**
  * 首个内置模板（用于验证结构化输出链路，不含小说领域结构）。

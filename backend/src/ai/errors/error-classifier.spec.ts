@@ -1,4 +1,9 @@
-import { BudgetExceededError, classifyError, extractStatus, shouldRetry } from './error-classifier';
+import {
+  BudgetExceededError,
+  classifyError,
+  extractStatus,
+  shouldRetry,
+} from './error-classifier.js';
 
 describe('extractStatus', () => {
   it('从 status 字段提取', () => {

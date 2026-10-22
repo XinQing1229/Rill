@@ -1,5 +1,5 @@
 import { Genre, StoryLength } from '@rill/shared';
-import { GENRE_PROFILES, profileFor, stagesFor } from './genre-profile';
+import { GENRE_PROFILES, profileFor, stagesFor } from './genre-profile.js';
 
 describe('genre profile', () => {
   it('每种类型都有完整配置', () => {

@@ -1,14 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { QuestionnaireAnswers, Stage, StageContext, worldSchemaFor } from '@rill/shared';
-import { LlmService } from '../../ai/llm.service';
-import { PromptRegistry } from '../../ai/prompts/prompt.registry';
-import { UsageRecorder } from '../../ai/observability/usage-recorder';
-import { newTraceId } from '../../ai/observability/trace';
-import { PrismaService } from '../prisma.service';
-import { profileFor } from '../genre/genre-profile';
-import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry';
-import { renderUpstreamContext } from '../prompts/upstream-context';
-import { worldV1 } from '../prompts/world-template';
+import { LlmService } from '../../ai/llm.service.js';
+import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
+import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
+import { newTraceId } from '../../ai/observability/trace.js';
+import { PrismaService } from '../prisma.service.js';
+import { profileFor } from '../genre/genre-profile.js';
+import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.js';
+import { renderUpstreamContext } from '../prompts/upstream-context.js';
+import { worldV1 } from '../prompts/world-template.js';
 
 @Injectable()
 export class WorldGenerator implements StageGenerator {

@@ -1,10 +1,13 @@
+// ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
+const jest = import.meta.jest;
+
 import { BadGatewayException, Logger } from '@nestjs/common';
 import { SampleBookSchema } from '@rill/shared';
-import { AiConfig } from './config/ai.config';
-import { ModelRegistry } from './models/model.registry';
-import { PromptRegistry } from './prompts/prompt.registry';
-import { UsageRecorder } from './observability/usage-recorder';
-import { LlmService } from './llm.service';
+import { AiConfig } from './config/ai.config.js';
+import { ModelRegistry } from './models/model.registry.js';
+import { PromptRegistry } from './prompts/prompt.registry.js';
+import { UsageRecorder } from './observability/usage-recorder.js';
+import { LlmService } from './llm.service.js';
 
 const API_KEY = 'secret-key-value';
 

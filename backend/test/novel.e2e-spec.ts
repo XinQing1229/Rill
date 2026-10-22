@@ -2,9 +2,12 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { Premise } from '@rill/shared';
-import { AppModule } from '../src/app.module';
-import { LlmService } from '../src/ai/llm.service';
-import { PrismaService } from '../src/novel/prisma.service';
+import { AppModule } from '../src/app.module.js';
+import { LlmService } from '../src/ai/llm.service.js';
+import { PrismaService } from '../src/novel/prisma.service.js';
+
+// ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
+const jest = import.meta.jest;
 
 const premise: Premise = {
   title: '临安十二时',
@@ -137,9 +140,7 @@ describe('创作流水线 API (e2e)', () => {
     await request(app.getHttpServer()).post(`/api/novel/projects/${id}/confirm`).expect(201);
 
     // 手动模式下确认不再只是推进指针，而是恢复图执行并生成下一阶段
-    const after = await request(app.getHttpServer())
-      .get(`/api/novel/projects/${id}`)
-      .expect(200);
+    const after = await request(app.getHttpServer()).get(`/api/novel/projects/${id}`).expect(200);
     expect(after.body.currentStage).toBe('world');
     expect(after.body.world.status).toBe('done');
   });
@@ -164,9 +165,7 @@ describe('创作流水线 API (e2e)', () => {
 
     // 本阶段被重新生成，模型调用次数增加
     expect(completeStructured.mock.calls.length).toBeGreaterThan(callsAfterFirst);
-    const after = await request(app.getHttpServer())
-      .get(`/api/novel/projects/${id}`)
-      .expect(200);
+    const after = await request(app.getHttpServer()).get(`/api/novel/projects/${id}`).expect(200);
     expect(after.body.currentStage).toBe('premise');
     expect(after.body.premise.status).toBe('done');
   });

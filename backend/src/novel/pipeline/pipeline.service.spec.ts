@@ -1,17 +1,25 @@
+// ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
+const jest = import.meta.jest;
+
 import fs from 'node:fs';
 import os from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { QuestionnaireAnswers, Stage } from '@rill/shared';
-import { PrismaService } from '../prisma.service';
-import { QuestionnaireService } from '../questionnaire/questionnaire';
-import { ArtifactRegistry, StageGenerator } from './artifact.registry';
-import { UpstreamAssembler } from './upstream.assembler';
-import { PipelineService } from './pipeline.service';
+import { PrismaService } from '../prisma.service.js';
+import { QuestionnaireService } from '../questionnaire/questionnaire.js';
+import { ArtifactRegistry, StageGenerator } from './artifact.registry.js';
+import { UpstreamAssembler } from './upstream.assembler.js';
+import { PipelineService } from './pipeline.service.js';
 
-process.env.DATABASE_URL = `file:${join(__dirname, '../../../pipeline-test.db')}`;
+// 后端为 ESM，测试同样以 ESM 运行，用 import.meta.url 推导目录而非 __dirname
+process.env.DATABASE_URL = `file:${join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../pipeline-test.db',
+)}`;
 
 const answers: QuestionnaireAnswers = {
   genre: 'xuanhuan',
@@ -79,13 +87,7 @@ describe('PipelineService', () => {
       await prisma.premise.updateMany({ where: { projectId }, data: { stale } });
     });
     const assembler = new UpstreamAssembler(prisma, artifacts);
-    service = new PipelineService(
-      prisma,
-      new QuestionnaireService(),
-      artifacts,
-      assembler,
-      config,
-    );
+    service = new PipelineService(prisma, new QuestionnaireService(), artifacts, assembler, config);
     await service.onModuleInit();
   });
 

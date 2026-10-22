@@ -1,6 +1,6 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { AiConfig } from '../config/ai.config';
-import { shouldRetry } from '../errors/error-classifier';
+import { AiConfig } from '../config/ai.config.js';
+import { shouldRetry } from '../errors/error-classifier.js';
 
 export interface LlmCallState {
   call: () => Promise<unknown>;

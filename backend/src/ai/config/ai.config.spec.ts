@@ -1,4 +1,4 @@
-import { AiConfig, parseAiConfig } from './ai.config';
+import { AiConfig, parseAiConfig } from './ai.config.js';
 
 const validConfig: AiConfig = {
   baseUrl: 'https://api.deepseek.com',

@@ -1,18 +1,18 @@
 import { BadGatewayException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { AI_CONFIG, AiConfig, ModelUsage } from './config/ai.config';
-import { ModelRegistry } from './models/model.registry';
-import { PromptRegistry } from './prompts/prompt.registry';
-import { sampleBookV1 } from './prompts/templates/sample-book';
-import { UsageRecorder } from './observability/usage-recorder';
-import { newTraceId } from './observability/trace';
-import { createLlmCallGraph } from './graphs/llm-call.graph';
-import { BudgetExceededError } from './errors/error-classifier';
+import { AI_CONFIG, AiConfig, ModelUsage } from './config/ai.config.js';
+import { ModelRegistry } from './models/model.registry.js';
+import { PromptRegistry } from './prompts/prompt.registry.js';
+import { sampleBookV1 } from './prompts/templates/sample-book.js';
+import { UsageRecorder } from './observability/usage-recorder.js';
+import { newTraceId } from './observability/trace.js';
+import { createLlmCallGraph } from './graphs/llm-call.graph.js';
+import { BudgetExceededError } from './errors/error-classifier.js';
 import type {
   ChatMessage,
   CompleteOptions,
   CompletionResult,
   StructuredOptions,
-} from './llm.types';
+} from './llm.types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySchema = any;

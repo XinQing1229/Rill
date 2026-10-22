@@ -1,5 +1,5 @@
-import { UpstreamAssembler } from './upstream.assembler';
-import { ArtifactRegistry } from './artifact.registry';
+import { UpstreamAssembler } from './upstream.assembler.js';
+import { ArtifactRegistry } from './artifact.registry.js';
 
 describe('UpstreamAssembler.readStageState', () => {
   const assembler = new UpstreamAssembler({} as never, new ArtifactRegistry());

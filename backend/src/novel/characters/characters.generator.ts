@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { CharacterListSchema, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
-import { LlmService } from '../../ai/llm.service';
-import { PromptRegistry } from '../../ai/prompts/prompt.registry';
-import { UsageRecorder } from '../../ai/observability/usage-recorder';
-import { newTraceId } from '../../ai/observability/trace';
-import { PrismaService } from '../prisma.service';
-import { GenreProfile, profileFor } from '../genre/genre-profile';
-import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry';
-import { renderUpstreamContext } from '../prompts/upstream-context';
-import { charactersV1 } from '../prompts/characters-template';
+import { LlmService } from '../../ai/llm.service.js';
+import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
+import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
+import { newTraceId } from '../../ai/observability/trace.js';
+import { PrismaService } from '../prisma.service.js';
+import { GenreProfile, profileFor } from '../genre/genre-profile.js';
+import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.js';
+import { renderUpstreamContext } from '../prompts/upstream-context.js';
+import { charactersV1 } from '../prompts/characters-template.js';
 
 /** 问卷「人物规模」选答到人数的映射 */
 const SCALE_COUNTS: Record<string, number> = {

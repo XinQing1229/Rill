@@ -9,14 +9,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 import { ArtifactStatus, PipelineMode, QuestionnaireAnswers, Stage } from '@rill/shared';
-import { PrismaService } from '../prisma.service';
-import { profileFor, stagesFor } from '../genre/genre-profile';
-import { MissingRequiredAnswersError, QuestionnaireService } from '../questionnaire/questionnaire';
-import { ArtifactRegistry } from './artifact.registry';
-import { UpstreamAssembler } from './upstream.assembler';
-import { compilePipelineGraph, PipelineState, StageRunner } from './pipeline.graph';
-import { createStageRunner, markDownstreamStale, setStageStatus } from './stage.runner';
-import { createCheckpointer } from './checkpointer';
+import { PrismaService } from '../prisma.service.js';
+import { profileFor, stagesFor } from '../genre/genre-profile.js';
+import {
+  MissingRequiredAnswersError,
+  QuestionnaireService,
+} from '../questionnaire/questionnaire.js';
+import { ArtifactRegistry } from './artifact.registry.js';
+import { UpstreamAssembler } from './upstream.assembler.js';
+import { compilePipelineGraph, PipelineState, StageRunner } from './pipeline.graph.js';
+import { createStageRunner, markDownstreamStale, setStageStatus } from './stage.runner.js';
+import { createCheckpointer } from './checkpointer.js';
 
 export interface CreateProjectInput {
   title: string;

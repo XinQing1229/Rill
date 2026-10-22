@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "description": "Rill backend (NestJS)",
+  "type": "module",
   "scripts": {
-    "dev": "nest start --watch",
+    "dev": "prisma generate && nest start --watch",
     "build": "prisma generate && nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "lint": "eslint .",
-    "test": "jest && jest --config ./test/jest-e2e.json",
-    "test:unit": "jest",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest",
+    "test:e2e": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
     "@langchain/core": "^1.2.20",
@@ -58,8 +59,24 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "globalSetup": "<rootDir>/../test/setup-db.ts",
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
     "transform": {
-      "^.+\\.ts$": "ts-jest"
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "diagnostics": {
+            "ignoreCodes": [
+              151002
+            ]
+          }
+        }
+      ]
+    },
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "testEnvironment": "node",
     "collectCoverageFrom": [

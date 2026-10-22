@@ -8,7 +8,7 @@ import {
   REQUIRED_ANSWER_FIELDS,
   TONES,
 } from '@rill/shared';
-import { profileFor } from '../genre/genre-profile';
+import { profileFor } from '../genre/genre-profile.js';
 
 export interface QuestionOption {
   value: string;

@@ -9,9 +9,9 @@ import {
   RollbackBodySchema,
   SetModeBodySchema,
 } from '@rill/shared';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { PipelineService } from './pipeline/pipeline.service';
-import { QuestionnaireService } from './questionnaire/questionnaire';
+import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { PipelineService } from './pipeline/pipeline.service.js';
+import { QuestionnaireService } from './questionnaire/questionnaire.js';
 
 @Controller('novel')
 export class NovelController {
@@ -57,10 +57,7 @@ export class NovelController {
 
   /** 确认推进或重新生成本阶段：由流水线图从中断处恢复执行 */
   @Post('projects/:id/confirm')
-  confirm(
-    @Param('id') id: string,
-    @Body(new ZodValidationPipe(ConfirmBodySchema)) body: unknown,
-  ) {
+  confirm(@Param('id') id: string, @Body(new ZodValidationPipe(ConfirmBodySchema)) body: unknown) {
     const { action } = body as { action?: ConfirmAction };
     return this.pipeline.confirm(id, action ?? 'confirm');
   }

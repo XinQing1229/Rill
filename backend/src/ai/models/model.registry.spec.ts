@@ -1,5 +1,5 @@
-import { AiConfig } from '../config/ai.config';
-import { ModelRegistry, buildChatModelOptions } from './model.registry';
+import { AiConfig } from '../config/ai.config.js';
+import { ModelRegistry, buildChatModelOptions } from './model.registry.js';
 
 const config: AiConfig = {
   baseUrl: 'https://api.deepseek.com',

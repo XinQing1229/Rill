@@ -2,8 +2,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { QuestionnaireAnswers, Stage } from '@rill/shared';
-import { buildPipelineGraph, PipelineState } from './pipeline.graph';
-import { createCheckpointer, toSqlitePath } from './checkpointer';
+import { buildPipelineGraph, PipelineState } from './pipeline.graph.js';
+import { createCheckpointer, toSqlitePath } from './checkpointer.js';
 
 function makeState(overrides: Partial<PipelineState> = {}): PipelineState {
   return {

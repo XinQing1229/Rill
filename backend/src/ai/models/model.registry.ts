@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ChatDeepSeek } from '@langchain/deepseek';
-import { AI_CONFIG, AiConfig, ModelUsage, UsageConfig } from '../config/ai.config';
+import { AI_CONFIG, AiConfig, ModelUsage, UsageConfig } from '../config/ai.config.js';
 
 export interface ResolvedModel {
   model: ChatDeepSeek;

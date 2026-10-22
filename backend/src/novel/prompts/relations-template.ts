@@ -1,4 +1,4 @@
-import { PromptTemplate } from '../../ai/prompts/prompt.registry';
+import { PromptTemplate } from '../../ai/prompts/prompt.registry.js';
 
 /**
  * 关系阶段模板。稳定前缀在前，上游产物作为变量注入。

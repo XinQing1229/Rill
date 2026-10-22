@@ -1,5 +1,5 @@
-import { AiConfig } from '../config/ai.config';
-import { UsageRecorder } from './usage-recorder';
+import { AiConfig } from '../config/ai.config.js';
+import { UsageRecorder } from './usage-recorder.js';
 
 const baseConfig: AiConfig = {
   baseUrl: 'https://api.deepseek.com',

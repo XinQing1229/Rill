@@ -1,11 +1,14 @@
+// ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
+const jest = import.meta.jest;
+
 import { Character, QuestionnaireAnswers } from '@rill/shared';
-import { LlmService } from '../../ai/llm.service';
-import { PromptRegistry } from '../../ai/prompts/prompt.registry';
-import { AiConfig } from '../../ai/config/ai.config';
-import { UsageRecorder } from '../../ai/observability/usage-recorder';
-import { PrismaService } from '../prisma.service';
-import { ArtifactRegistry } from '../pipeline/artifact.registry';
-import { RelationGenerator } from './relations.generator';
+import { LlmService } from '../../ai/llm.service.js';
+import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
+import { AiConfig } from '../../ai/config/ai.config.js';
+import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
+import { PrismaService } from '../prisma.service.js';
+import { ArtifactRegistry } from '../pipeline/artifact.registry.js';
+import { RelationGenerator } from './relations.generator.js';
 
 const config: AiConfig = {
   baseUrl: 'https://api.deepseek.com',

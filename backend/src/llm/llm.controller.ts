@@ -5,8 +5,8 @@ import {
   Post,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { LlmService } from '../ai/llm.service';
-import { newTraceId } from '../ai/observability/trace';
+import { LlmService } from '../ai/llm.service.js';
+import { newTraceId } from '../ai/observability/trace.js';
 import { PingResponse } from '@rill/shared';
 
 @Controller('llm')

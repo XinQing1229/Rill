@@ -1,5 +1,5 @@
 import { QuestionnaireAnswers } from '@rill/shared';
-import { QuestionnaireService, MissingRequiredAnswersError } from './questionnaire';
+import { QuestionnaireService, MissingRequiredAnswersError } from './questionnaire.js';
 
 describe('QuestionnaireService', () => {
   const service = new QuestionnaireService();

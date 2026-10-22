@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import configuration from './config/configuration';
-import { HealthController } from './health/health.controller';
-import { LlmModule } from './llm/llm.module';
-import { NovelModule } from './novel/novel.module';
+import configuration from './config/configuration.js';
+import { HealthController } from './health/health.controller.js';
+import { LlmModule } from './llm/llm.module.js';
+import { NovelModule } from './novel/novel.module.js';
 
 @Module({
   imports: [

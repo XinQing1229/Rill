@@ -1,10 +1,10 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ArtifactStatus, QuestionnaireAnswers, Stage } from '@rill/shared';
-import { PrismaService } from '../prisma.service';
-import { stagesFor } from '../genre/genre-profile';
-import { ArtifactRegistry } from './artifact.registry';
-import { UpstreamAssembler } from './upstream.assembler';
-import { PipelineState, StageRunner } from './pipeline.graph';
+import { PrismaService } from '../prisma.service.js';
+import { stagesFor } from '../genre/genre-profile.js';
+import { ArtifactRegistry } from './artifact.registry.js';
+import { UpstreamAssembler } from './upstream.assembler.js';
+import { PipelineState, StageRunner } from './pipeline.graph.js';
 
 export interface StageRunnerDeps {
   prisma: PrismaService;

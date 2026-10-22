@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AI_CONFIG, AiConfig } from '../config/ai.config';
+import { AI_CONFIG, AiConfig } from '../config/ai.config.js';
 
 export interface TokenUsage {
   promptTokens: number;

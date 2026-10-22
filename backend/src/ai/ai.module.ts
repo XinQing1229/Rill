@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AI_CONFIG, parseAiConfig } from './config/ai.config';
-import { ModelRegistry } from './models/model.registry';
-import { PromptRegistry } from './prompts/prompt.registry';
-import { UsageRecorder } from './observability/usage-recorder';
-import { LlmService } from './llm.service';
+import { AI_CONFIG, parseAiConfig } from './config/ai.config.js';
+import { ModelRegistry } from './models/model.registry.js';
+import { PromptRegistry } from './prompts/prompt.registry.js';
+import { UsageRecorder } from './observability/usage-recorder.js';
+import { LlmService } from './llm.service.js';
 
 @Module({
   providers: [

@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Premise, PremiseSchema, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
-import { LlmService } from '../../ai/llm.service';
-import { PromptRegistry } from '../../ai/prompts/prompt.registry';
-import { UsageRecorder } from '../../ai/observability/usage-recorder';
-import { newTraceId } from '../../ai/observability/trace';
-import { PrismaService } from '../prisma.service';
-import { profileFor } from '../genre/genre-profile';
-import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry';
-import { premiseV1 } from '../prompts/premise-template';
+import { LlmService } from '../../ai/llm.service.js';
+import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
+import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
+import { newTraceId } from '../../ai/observability/trace.js';
+import { PrismaService } from '../prisma.service.js';
+import { profileFor } from '../genre/genre-profile.js';
+import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.js';
+import { premiseV1 } from '../prompts/premise-template.js';
 
 const LENGTH_LABEL: Record<string, string> = {
   short: '短篇',
