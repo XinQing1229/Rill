@@ -49,6 +49,11 @@ Rill —— 小说创作 Agent：通过结构化问卷收集创作意图，按�
 - Prisma + SQLite 限制：无 enum、无 Json 类型——枚举用 String 存储，结构化内容存 JSON 字符串（读写时用 zod 校验）。
 - AI 能力统一走 `backend/src/ai/`：模型注册表（`models/model.registry.ts`）、提示词注册表（`prompts/prompt.registry.ts`）、错误分类（`errors/error-classifier.ts`）、用量记录（`observability/usage-recorder.ts`）。新 AI 功能优先复用这些基建，不要把 prompt/model 硬编码在业务代码里。
 - token 用量记录到 `Project`/`Premise` 的 `promptTokens`/`completionTokens` 字段。
+- 后端为 ESM（`backend/package.json` 的 `type: module` + tsconfig 的 `module: nodenext`）：
+  - 相对导入必须带 `.js` 扩展名（如 `./app.module.js`）；缺失时 ESM 下无法解析，tsc 报 `TS2307`（或提示补扩展名的 `TS2835`），构建期即拦截；不要引入路径别名。
+  - 不在源码里使用 `__dirname` / `require()`，ESM 下用 `import.meta.url` + `fileURLToPath` 推导目录。
+  - 测试同样以 ESM 运行（`NODE_OPTIONS=--experimental-vm-modules`）：`jest` 对象不注入全局，需写 `const jest = import.meta.jest;`；`jest.mock` 不可用，需要 mock 模块时改用 `jest.unstable_mockModule`。jest 的 globalSetup 仍以 CommonJS 加载，那里可用 `__dirname`。
+  - 改完 tsconfig 后必须重新 `prisma generate`——Prisma 生成物的导入后缀由 tsconfig 推导（`build` 与 `dev` 脚本已内置该步骤）。
 
 ## 安全红线
 
