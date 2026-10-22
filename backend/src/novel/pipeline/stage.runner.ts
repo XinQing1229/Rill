@@ -28,8 +28,27 @@ export async function setStageStatus(
     const runId = project.runId ?? 'legacy';
     await tx.stageRun.upsert({
       where: { projectId_runId_stage: { projectId, runId, stage } },
-      create: { projectId, runId, stage, status, error: error ?? null },
-      update: { status, error: error ?? null, ...(status === 'done' ? { stale: false } : {}) },
+      create: {
+        projectId,
+        runId,
+        stage,
+        status,
+        error: error ?? null,
+        confirmedAt:
+          status === 'done' && project.mode === 'auto' && stage !== 'outline' ? new Date() : null,
+      },
+      update: {
+        status,
+        error: error ?? null,
+        ...(status === 'done'
+          ? {
+              stale: false,
+              ...(project.mode === 'auto' && stage !== 'outline'
+                ? { confirmedAt: new Date() }
+                : {}),
+            }
+          : {}),
+      },
     });
     await storageFor(stage)?.write(tx, projectId, { status, error: error ?? null });
   });

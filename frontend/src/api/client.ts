@@ -41,3 +41,11 @@ export function getHealth(): Promise<HealthResponse> {
 export function pingLlm(): Promise<PingResponse> {
   return post('/api/llm/ping');
 }
+
+export function patch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function del<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'DELETE' });
+}

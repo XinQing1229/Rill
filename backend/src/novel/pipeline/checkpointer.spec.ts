@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { QuestionnaireAnswers, Stage } from '@rill/shared';
 import { buildPipelineGraph, PipelineState } from './pipeline.graph.js';
-import { createCheckpointer, toSqlitePath } from './checkpointer.js';
+import { createCheckpointer, deleteCheckpointThread, toSqlitePath } from './checkpointer.js';
 
 function makeState(overrides: Partial<PipelineState> = {}): PipelineState {
   return {
@@ -43,6 +43,12 @@ describe('流水线 checkpointer', () => {
 
   afterEach(() => {
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('全新库删除未知线程不会因未建表失败', async () => {
+    await expect(
+      deleteCheckpointThread(createCheckpointer(file), 'missing'),
+    ).resolves.toBeUndefined();
   });
 
   it('重启后从中断处继续，且不重复已完成阶段', async () => {

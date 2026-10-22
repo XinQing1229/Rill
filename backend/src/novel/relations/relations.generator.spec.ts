@@ -1,7 +1,7 @@
 // ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
 const jest = import.meta.jest;
 
-import { Character, QuestionnaireAnswers } from '@rill/shared';
+import { Character, QuestionnaireAnswers, RelationListSchema } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
 import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
 import { AiConfig } from '../../ai/config/ai.config.js';
@@ -238,12 +238,16 @@ describe('RelationGenerator', () => {
 
   it('提示词包含已确认人物', async () => {
     const { generator, completeStructured } = setup();
-    completeStructured.mockResolvedValue({ relations: [] });
+    const result = { relations: [] };
+    expect(RelationListSchema.safeParse(result).success).toBe(true);
+    completeStructured.mockResolvedValue(result);
 
     await generator.generate({ characters: contextCharacters }, answers, 'p1');
 
     const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
     expect(messages[0].content).toContain('【已确认人物】');
     expect(messages[0].content).toContain('甲');
+    expect(messages[0].content).toContain('一个可能改变关系的关键选择或事件');
+    expect(messages[0].content).toContain('关系变化必须来自人物行动');
   });
 });

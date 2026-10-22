@@ -2,7 +2,7 @@
 
 novel make agent —— 一个写小说并上传到小说平台的 Agent。
 
-当前状态：全栈项目脚手架已就绪（本地开发环境、健康检查、LLM 连通性验证）。小说创作能力尚未实现，按 OpenSpec 变更流程逐个推进。
+当前状态：已实现结构化问卷、种子、世界观、人物与关系，以及两步确认的大纲生成。支持手动/自动推进、持久化恢复、回退与下游失效。细纲、正文与小说平台上传仍待后续 OpenSpec 变更实现。
 
 ## 技术栈
 
@@ -77,10 +77,41 @@ npm run dev
 | --- | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | 是 | — | DeepSeek API 密钥 |
 | `DEEPSEEK_BASE_URL` | 否 | `https://api.deepseek.com` | 接口地址 |
-| `DEEPSEEK_MODEL` | 否 | `deepseek-flash` | 默认模型；重推理任务可用 `deepseek-v4-pro` |
+| `LLM_DRAFT_MODEL` | 否 | `deepseek-flash` | 普通与结构化生成模型 |
+| `LLM_REASONING_MODEL` | 否 | `deepseek-flash` | 推理用途模型 |
+| `OUTLINE_CALL_TIMEOUT_MS` | 否 | `120000` | 大纲单批调用超时（毫秒） |
+| `OUTLINE_TOTAL_TIMEOUT_MS` | 否 | `480000` | 一次章纲展开的总预算，耗尽后可续跑 |
+| `OUTLINE_MAX_TOKENS` | 否 | `8192` | 大纲单次最大输出 token |
 | `PORT` | 否 | `3000` | 后端端口 |
 
 > 安全提示：API Key 只写入被 git 忽略的 `.env`，切勿提交到仓库或写入日志。
+
+## 大纲生成与编辑
+
+升级已有环境后先执行 `npm exec -w @rill/backend -- prisma migrate deploy`，新增表不会覆盖原有小说。
+
+1. 完成并确认种子、世界观（按类型可跳过）、人物与关系。
+2. 在大纲工作台设置目标章数；默认短篇 8、中篇 40、长篇 200 章。
+3. 生成全书规划，直接编辑主线、转折、结局、人物发展与分段，保存后点击「确认规划并展开章纲」。保存不会自动确认。
+4. 系统按剧情段顺序展开章纲，每批最多 10 章。失败时点击续跑，已完成批次和保存的人工编辑会保留。
+5. 按需选择章节编辑概要，保存后点击「确认完整大纲并进入细纲」。当前细纲生成器尚未实现，确认事实会保留，流程在细纲阶段提示未开放。
+
+修改规划或目标章数会使已有章纲及下游失效；修改单章概要保留其他章节，使完整大纲回到待确认、下游失效。已离开大纲阶段时需先回退后编辑。旧页面提交版本冲突时保留本地输入，可核对后载入最新内容。
+
+自动模式在结构与业务校验通过后连续执行大纲内部步骤；错误停在对应步骤。两次人工确认通过 LangGraph 大纲子图暂停；业务内容、确认版本及批次进度独立持久化。服务重启后需要再次触发续跑，不会自行启动付费调用。模型已返回但尚未入库就宕机时，该批可能重新调用模型，不承诺外部请求绝对只调用一次。
+
+大纲相关接口（前缀 `/api/novel/projects/:id`）：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/outline` | 大纲内容、版本与内部进度；未生成时只读返回默认配置 |
+| PATCH | `/outline/config` | `expectedRevision`、`targetChapters` |
+| PATCH | `/outline/plan` | `expectedRevision`、`plan` |
+| PATCH | `/outline/chapters/:number` | `expectedRevision`、`chapter`；不改变章号或所属剧情段 |
+| POST | `/confirm` | `target: outline-plan / outline` 与 `expectedRevision`，明确确认目标 |
+| POST | `/generate` | 默认续跑；`force: true` 从规划重新生成 |
+
+真实模型验收可在全仓构建后执行 `node backend/scripts/outline-smoke.mjs`。脚本使用隔离的临时数据库，生成 8 章并验证规划/章纲编辑确认，会产生实际模型用量；缺少密钥时明确跳过，输出不含密钥。
 
 ## 开发流程
 

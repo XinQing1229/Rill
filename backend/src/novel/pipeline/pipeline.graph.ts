@@ -33,6 +33,10 @@ export interface PipelineGraphOptions {
   /** 参与编排的阶段，顺序即流程顺序 */
   stages: Stage[];
   runner: StageRunner;
+  outlineNodes?: Record<
+    'generatePlan' | 'reviewPlan' | 'expand' | 'reviewOutline',
+    (state: PipelineState) => Promise<Partial<PipelineState>>
+  >;
   /** 该类型声明跳过的阶段，作为跳过判定的二次保障（stages 通常已过滤） */
   skipStages?: Stage[];
 }
@@ -71,7 +75,23 @@ export function buildPipelineGraph(options: PipelineGraphOptions) {
     const next = nextStage(stage, options.stages, skipStages);
     // currentStage 由 runner 维护（表示当前正在处理的阶段）；
     // 推进到下一节点由下面的条件边负责，中断点由 checkpointer 记录
-    graph.addNode(stage, async (state: PipelineState) => options.runner(state, stage));
+    if (stage === 'outline' && options.outlineNodes) {
+      const nodes = options.outlineNodes;
+      const outline = new StateGraph(PipelineStateAnnotation)
+        .addNode('generatePlan', nodes.generatePlan)
+        .addNode('reviewPlan', nodes.reviewPlan)
+        .addNode('expand', nodes.expand)
+        .addNode('reviewOutline', nodes.reviewOutline)
+        .addEdge(START, 'generatePlan')
+        .addEdge('generatePlan', 'reviewPlan')
+        .addEdge('reviewPlan', 'expand')
+        .addEdge('expand', 'reviewOutline')
+        .addEdge('reviewOutline', END)
+        .compile();
+      graph.addNode(stage, outline);
+    } else {
+      graph.addNode(stage, async (state: PipelineState) => options.runner(state, stage));
+    }
     graph.addConditionalEdges(stage, () => next);
   }
 
@@ -94,7 +114,9 @@ export function compilePipelineGraph(options: CompilePipelineOptions) {
   const graph = buildPipelineGraph(options);
   const skipStages = options.skipStages ?? [];
   const pausable = options.stages.filter(
-    (stage) => nextStage(stage, options.stages, skipStages) !== END,
+    (stage) =>
+      !(stage === 'outline' && options.outlineNodes) &&
+      nextStage(stage, options.stages, skipStages) !== END,
   );
 
   return graph.compile({

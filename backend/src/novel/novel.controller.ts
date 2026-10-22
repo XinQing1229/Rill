@@ -1,6 +1,23 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  Patch,
+} from '@nestjs/common';
 import {
   ConfirmAction,
+  OutlineConfigBodySchema,
+  OutlinePlanBodySchema,
+  OutlineChapterBodySchema,
+  type OutlineConfirm,
+  type OutlinePlan,
+  type ChapterSummary,
   ConfirmBodySchema,
   CreateProjectSchema,
   GENRES,
@@ -8,8 +25,11 @@ import {
   Genre,
   RollbackBodySchema,
   SetModeBodySchema,
+  ProjectScopeSchema,
+  type ProjectScope,
 } from '@rill/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { OutlineService } from './outline/outline.service.js';
 import { PipelineService } from './pipeline/pipeline.service.js';
 import { QuestionnaireService } from './questionnaire/questionnaire.js';
 
@@ -18,6 +38,7 @@ export class NovelController {
   constructor(
     private readonly pipeline: PipelineService,
     private readonly questionnaire: QuestionnaireService,
+    private readonly outline: OutlineService,
   ) {}
 
   /** 获取问卷结构（随类型级联） */
@@ -35,10 +56,39 @@ export class NovelController {
     return this.pipeline.create(body as Parameters<PipelineService['create']>[0]);
   }
 
-  /** 项目列表（列表页用，按更新时间倒序） */
+  /** 项目列表（列表页用）：默认创作中，scope=trash 为回收站 */
   @Get('projects')
-  list() {
-    return this.pipeline.list();
+  list(
+    @Query('scope', new ZodValidationPipe(ProjectScopeSchema)) scope?: ProjectScope | undefined,
+  ) {
+    return this.pipeline.list(scope ?? 'active');
+  }
+
+  /** 软删除：移入回收站，产物保留可恢复 */
+  @Delete('projects/:id')
+  softDelete(@Param('id') id: string) {
+    return this.pipeline.softDelete(id);
+  }
+
+  /** 从回收站恢复 */
+  @Post('projects/:id/restore')
+  restore(@Param('id') id: string) {
+    return this.pipeline.restore(id);
+  }
+
+  /** 永久删除单个回收站项目（不可恢复） */
+  @Delete('projects/:id/permanent')
+  purge(@Param('id') id: string) {
+    return this.pipeline.purge(id);
+  }
+
+  /** 清空回收站：scope=trash 才允许，避免误触发全量删除 */
+  @Delete('projects')
+  clearTrash(
+    @Query('scope', new ZodValidationPipe(ProjectScopeSchema)) scope?: ProjectScope | undefined,
+  ) {
+    if (scope !== 'trash') throw new BadRequestException('清空回收站必须指定 scope=trash');
+    return this.pipeline.clearTrash();
   }
 
   @Get('projects/:id')
@@ -58,8 +108,16 @@ export class NovelController {
   /** 确认推进或重新生成本阶段：由流水线图从中断处恢复执行 */
   @Post('projects/:id/confirm')
   confirm(@Param('id') id: string, @Body(new ZodValidationPipe(ConfirmBodySchema)) body: unknown) {
-    const { action } = body as { action?: ConfirmAction };
-    return this.pipeline.confirm(id, action ?? 'confirm');
+    const { action, target, expectedRevision } = body as {
+      action?: ConfirmAction;
+    } & Partial<OutlineConfirm>;
+    if (target && expectedRevision === undefined)
+      throw new BadRequestException('确认必须提供 expectedRevision');
+    return this.pipeline.confirm(
+      id,
+      action ?? 'confirm',
+      target ? { target, expectedRevision: expectedRevision! } : undefined,
+    );
   }
 
   @Post('projects/:id/rollback')
@@ -83,6 +141,39 @@ export class NovelController {
   @Get('projects/:id/relations')
   relations(@Param('id') id: string) {
     return this.pipeline.relations(id);
+  }
+
+  @Get('projects/:id/outline')
+  getOutline(@Param('id') id: string) {
+    return this.outline.get(id);
+  }
+
+  @Patch('projects/:id/outline/config')
+  configureOutline(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(OutlineConfigBodySchema))
+    body: { expectedRevision: number; targetChapters: number },
+  ) {
+    return this.outline.configure(id, body.expectedRevision, body.targetChapters);
+  }
+
+  @Patch('projects/:id/outline/plan')
+  saveOutlinePlan(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(OutlinePlanBodySchema))
+    body: { expectedRevision: number; plan: OutlinePlan },
+  ) {
+    return this.outline.savePlan(id, body.expectedRevision, body.plan);
+  }
+
+  @Patch('projects/:id/outline/chapters/:number')
+  saveOutlineChapter(
+    @Param('id') id: string,
+    @Param('number') number: string,
+    @Body(new ZodValidationPipe(OutlineChapterBodySchema))
+    body: { expectedRevision: number; chapter: ChapterSummary },
+  ) {
+    return this.outline.saveChapter(id, body.expectedRevision, Number(number), body.chapter);
   }
 
   @Post('projects/:id/mode')

@@ -49,6 +49,16 @@ describe('readStageState（与后端 UpstreamAssembler 同口径）', () => {
     expect(readStageState(project, 'characters')?.status).toBe('failed');
   });
 
+  it('1:N 全部 pending 报 pending（而非 generating）', () => {
+    const project = makeProject({
+      characters: [
+        makeCharacterRow('甲', 'protagonist', { status: 'pending' }),
+        makeCharacterRow('乙', 'supporting', { status: 'pending' }),
+      ],
+    });
+    expect(readStageState(project, 'characters')).toEqual({ status: 'pending', stale: false });
+  });
+
   it('无产物行返回 undefined', () => {
     expect(readStageState(makeProject(), 'relations')).toBeUndefined();
   });

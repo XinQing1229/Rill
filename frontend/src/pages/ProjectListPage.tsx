@@ -1,27 +1,57 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Empty, Skeleton, Alert } from 'antd';
+import { Alert, Button, Empty, Modal, Popconfirm, Segmented, Skeleton } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
-import { GENRE_LABELS, LENGTH_LABELS, STAGE_LABELS, type ProjectSummary } from '@rill/shared';
-import { listProjects } from '../api/novel';
+import {
+  GENRE_LABELS,
+  LENGTH_LABELS,
+  STAGE_LABELS,
+  type ProjectScope,
+  type ProjectSummary,
+} from '@rill/shared';
+import {
+  clearTrash,
+  deleteProject,
+  listProjects,
+  purgeProject,
+  restoreProject,
+} from '../api/novel';
 import { StatusTag } from '../components/StatusTag';
 import { formatUpdatedAt } from '../lib/stage';
 
-/** 列表页回答的问题：「我的项目进行到哪了？」 */
+/** 列表页回答的问题：「我的项目进行到哪了？」以及「刚删的项目还能找回来吗？」 */
 export function ProjectListPage() {
   const navigate = useNavigate();
+  const [scope, setScope] = useState<ProjectScope>('active');
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
+  const trash = scope === 'trash';
 
   const load = useCallback(() => {
     setError(null);
-    listProjects()
+    listProjects(scope)
       .then(setProjects)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : '加载失败'));
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** 删除/恢复/清理走同一出口：失败展示后端文案，成功后整体刷新，不做乐观更新 */
+  const run = useCallback(
+    async (action: () => Promise<unknown>) => {
+      setActionError(null);
+      try {
+        await action();
+        await load();
+      } catch (e: unknown) {
+        setActionError(e instanceof Error ? e.message : '操作失败，请重试');
+      }
+    },
+    [load],
+  );
 
   const counts = useMemo(() => {
     const list = projects ?? [];
@@ -33,19 +63,45 @@ export function ProjectListPage() {
     };
   }, [projects]);
 
+  const submitClearTrash = () => {
+    setClearOpen(false);
+    void run(clearTrash);
+  };
+
+  const subtitle = (() => {
+    if (projects === null) return '加载中…';
+    if (trash) return `${projects.length} 个已删除项目，按最近删除排序`;
+    return `${projects.length} 个创作项目，按最近更新排序`;
+  })();
+
   return (
     <div className="page">
       <div className="title-row">
         <div>
-          <h1>项目</h1>
-          <div className="sub">
-            {projects === null ? '加载中…' : `${projects.length} 个创作项目，按最近更新排序`}
-          </div>
+          <h1>{trash ? '回收站' : '项目'}</h1>
+          <div className="sub">{subtitle}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Link to="/new">
-            <Button type="primary">新建项目</Button>
-          </Link>
+          <Segmented<ProjectScope>
+            value={scope}
+            onChange={(value) => {
+              setScope(value);
+              setProjects(null);
+            }}
+            options={[
+              { label: '创作中', value: 'active' },
+              { label: '回收站', value: 'trash' },
+            ]}
+          />
+          {trash ? (
+            <Button danger disabled={!projects?.length} onClick={() => setClearOpen(true)}>
+              清空回收站
+            </Button>
+          ) : (
+            <Link to="/new">
+              <Button type="primary">新建项目</Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -64,6 +120,18 @@ export function ProjectListPage() {
         />
       )}
 
+      {actionError !== null && (
+        <Alert
+          type="error"
+          showIcon
+          message="操作未完成"
+          description={actionError}
+          closable
+          onClose={() => setActionError(null)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
+
       {projects === null && error === null && (
         <div aria-busy="true">
           <Skeleton active paragraph={{ rows: 0 }} style={{ marginBottom: 24 }} />
@@ -72,64 +140,136 @@ export function ProjectListPage() {
       )}
 
       {projects !== null && projects.length === 0 && (
-        <Empty description="还没有项目：从问卷开始，先生成种子">
-          <Link to="/new">
-            <Button type="primary">新建项目</Button>
-          </Link>
+        <Empty
+          description={
+            trash ? '回收站是空的：删除的项目会出现在这里' : '还没有项目：从问卷开始，先生成种子'
+          }
+        >
+          {!trash && (
+            <Link to="/new">
+              <Button type="primary">新建项目</Button>
+            </Link>
+          )}
         </Empty>
       )}
 
       {projects !== null && projects.length > 0 && (
         <>
-          <div className="kpis">
-            <div className="kpi">
-              <div className="kpi-label">项目</div>
-              <div className="kpi-value num">{counts.total}</div>
+          {!trash && (
+            <div className="kpis">
+              <div className="kpi">
+                <div className="kpi-label">项目</div>
+                <div className="kpi-value num">{counts.total}</div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-label">待操作</div>
+                <div className="kpi-value num">{counts.idle}</div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-label">生成中</div>
+                <div className="kpi-value num">{counts.running}</div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-label">失败</div>
+                <div className="kpi-value num">{counts.failed}</div>
+              </div>
             </div>
-            <div className="kpi">
-              <div className="kpi-label">待操作</div>
-              <div className="kpi-value num">{counts.idle}</div>
-            </div>
-            <div className="kpi">
-              <div className="kpi-label">生成中</div>
-              <div className="kpi-value num">{counts.running}</div>
-            </div>
-            <div className="kpi">
-              <div className="kpi-label">失败</div>
-              <div className="kpi-value num">{counts.failed}</div>
-            </div>
-          </div>
+          )}
 
           <div className="rows">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className="row"
-                role="button"
-                tabIndex={0}
-                onClick={() => void navigate(`/projects/${project.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void navigate(`/projects/${project.id}`);
-                }}
-              >
-                <span className="t">
-                  {project.title}
-                  <span className="sub">
-                    {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length]} ·{' '}
-                    {project.mode === 'manual' ? '手动推进' : '自动推进'}
+            {projects.map((project) =>
+              trash ? (
+                <div key={project.id} className="row">
+                  <span className="t">
+                    {project.title}
+                    <span className="sub">
+                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length]} ·{' '}
+                      {project.deletedAt
+                        ? `删除于 ${formatUpdatedAt(project.deletedAt)}`
+                        : '已删除'}
+                    </span>
                   </span>
-                </span>
-                <span className="stage-cell">
-                  <span>当前阶段</span>
-                  <span style={{ fontWeight: 500 }}>{STAGE_LABELS[project.currentStage]}</span>
-                </span>
-                <StatusTag status={project.status} />
-                <span className="when">{formatUpdatedAt(project.updatedAt)}</span>
-              </div>
-            ))}
+                  <span className="stage-cell">
+                    <span>停留阶段</span>
+                    <span style={{ fontWeight: 500 }}>{STAGE_LABELS[project.currentStage]}</span>
+                  </span>
+                  <StatusTag status={project.status} />
+                  <span className="when">
+                    <Button size="small" onClick={() => void run(() => restoreProject(project.id))}>
+                      恢复
+                    </Button>
+                  </span>
+                  <span>
+                    <Popconfirm
+                      title="永久删除该项目"
+                      description="删除后不可恢复，各阶段产物与用量记录一并清除。"
+                      okText="永久删除"
+                      okButtonProps={{ danger: true }}
+                      cancelText="取消"
+                      onConfirm={() => void run(() => purgeProject(project.id))}
+                    >
+                      <Button size="small" danger>
+                        永久删除
+                      </Button>
+                    </Popconfirm>
+                  </span>
+                </div>
+              ) : (
+                <div
+                  key={project.id}
+                  className="row"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => void navigate(`/projects/${project.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void navigate(`/projects/${project.id}`);
+                  }}
+                >
+                  <span className="t">
+                    {project.title}
+                    <span className="sub">
+                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length]} ·{' '}
+                      {project.mode === 'manual' ? '手动推进' : '自动推进'}
+                    </span>
+                  </span>
+                  <span className="stage-cell">
+                    <span>当前阶段</span>
+                    <span style={{ fontWeight: 500 }}>{STAGE_LABELS[project.currentStage]}</span>
+                  </span>
+                  <StatusTag status={project.status} />
+                  <span className="when">{formatUpdatedAt(project.updatedAt)}</span>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Popconfirm
+                      title="删除该项目"
+                      description="删除后进入回收站，可在回收站恢复；产物会完整保留。"
+                      okText="删除"
+                      okButtonProps={{ danger: true }}
+                      cancelText="取消"
+                      onConfirm={() => void run(() => deleteProject(project.id))}
+                    >
+                      <Button size="small" danger>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  </span>
+                </div>
+              ),
+            )}
           </div>
         </>
       )}
+
+      <Modal
+        open={clearOpen}
+        title="清空回收站"
+        okText="清空回收站"
+        okButtonProps={{ danger: true }}
+        cancelText="取消"
+        onOk={submitClearTrash}
+        onCancel={() => setClearOpen(false)}
+      >
+        <p>回收站内的所有项目将被永久删除，包括其全部阶段产物，且无法恢复。</p>
+      </Modal>
     </div>
   );
 }

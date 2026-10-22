@@ -24,6 +24,7 @@ export class UpstreamAssembler {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       include: {
+        outline: { include: { batches: true } },
         premise: true,
         world: true,
         characters: true,
@@ -41,6 +42,12 @@ export class UpstreamAssembler {
       const state = this.readStageState(project, stage);
       if (!state || state.status !== 'done') {
         throw new BadRequestException(`上游阶段 ${stage} 尚未完成，请先完成该阶段`);
+      }
+      if (
+        stage === 'outline' &&
+        (!project.outline || project.outline.confirmedRevision !== project.outline.revision)
+      ) {
+        throw new BadRequestException('上游阶段 outline 尚未确认完整大纲');
       }
       if (state.stale) {
         throw new BadRequestException(`上游阶段 ${stage} 已失效，请先重新生成该阶段`);
@@ -71,7 +78,9 @@ export class UpstreamAssembler {
               ? 'done'
               : rows.some((row) => row.status === 'failed')
                 ? 'failed'
-                : 'generating',
+                : rows.some((row) => row.status === 'generating')
+                  ? 'generating'
+                  : 'pending',
             stale: rows.some((row) => row.stale),
           };
     return execution

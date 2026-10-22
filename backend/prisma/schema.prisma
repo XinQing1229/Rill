@@ -24,14 +24,19 @@ model Project {
   promptTokens         Int      @default(0)
   completionTokens     Int      @default(0)
   runId                String?
+  // 软删除时刻：非空即已移入回收站，恢复时置空（产物数据在回收站期间保持冻结）
+  deletedAt            DateTime?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
+  outline Outline?
   premise Premise?
   world WorldSetting?
   characters Character[]
   relations Relation[]
   stageRuns StageRun[]
+
+  @@index([deletedAt])
 }
 
 model StageRun {
@@ -128,4 +133,45 @@ model Relation {
 
   @@unique([projectId, fromId, toId])
   @@index([projectId])
+}
+
+
+model Outline {
+  id String @id @default(cuid())
+  projectId String @unique
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  targetChapters Int
+  step String @default("planning")
+  revision Int @default(0)
+  planRevision Int @default(0)
+  planConfirmedRevision Int?
+  confirmedRevision Int?
+  planData String?
+  stale Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  batches OutlineBatch[]
+}
+
+model OutlineBatch {
+  id String @id @default(cuid())
+  outlineId String
+  outline Outline @relation(fields: [outlineId], references: [id], onDelete: Cascade)
+  planRevision Int
+  startChapter Int
+  endChapter Int
+  segmentId String
+  data String?
+  status String @default("pending")
+  error String?
+  promptTokens Int @default(0)
+  completionTokens Int @default(0)
+  @@unique([outlineId, planRevision, startChapter])
+}
+
+model OutlineUsage {
+  traceId String @id
+  projectId String
+  promptTokens Int
+  completionTokens Int
 }

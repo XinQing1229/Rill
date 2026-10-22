@@ -127,6 +127,8 @@ export type ConfirmAction = (typeof CONFIRM_ACTIONS)[number];
 export const ConfirmBodySchema = z
   .object({
     action: z.enum(CONFIRM_ACTIONS).optional(),
+    target: z.enum(['outline-plan', 'outline']).optional(),
+    expectedRevision: z.number().int().nonnegative().optional(),
   })
   .default({});
 
@@ -140,16 +142,37 @@ export const SetModeBodySchema = z.object({
   mode: z.enum(PIPELINE_MODES),
 });
 
+/** GET/DELETE /api/novel/projects 的 scope 查询参数：默认 active（创作中），trash 为回收站 */
+export const PROJECT_SCOPES = ['active', 'trash'] as const;
+export type ProjectScope = (typeof PROJECT_SCOPES)[number];
+export const ProjectScopeSchema = z.enum(PROJECT_SCOPES).optional();
+
 /**
  * 种子（Premise）产物 schema。
  * 注意：**不含**类型、篇幅、基调、叙事视角——这些由问卷直接决定，不交给模型生成，
  * 以避免模型输出与作者选择冲突。
  */
+export const StoryEngineSchema = z.object({
+  openingGoal: z.string().trim().min(1).describe('主角在故事开篇要达成的具体目标，与长期欲望区分'),
+  mainObstacle: z
+    .string()
+    .trim()
+    .min(1)
+    .describe('当前阻止主角达成目标的主要人物、势力、规则或处境'),
+  failureCost: z.string().trim().min(1).describe('主角未能达成目标将付出的具体代价'),
+  escalationPath: z
+    .array(z.string().trim().min(1))
+    .min(2)
+    .max(4)
+    .describe('按顺序递进的压力步骤，说明追求目标如何变得更困难或代价更高'),
+});
+
 export const PremiseSchema = z.object({
   title: z.string().describe('暂定书名'),
   logline: z.string().describe('一句话梗概，突出钩子'),
   theme: z.string().describe('故事想表达的主题'),
   coreConflict: z.string().describe('核心矛盾：谁与谁、因何冲突'),
+  storyEngine: StoryEngineSchema.describe('推动故事持续发展的开篇目标、阻力、代价与升级路径'),
   protagonist: z
     .object({
       name: z.string().describe('主角姓名'),
@@ -169,7 +192,12 @@ export const PremiseSchema = z.object({
   taboos: z.array(z.string()).describe('需要避免的内容'),
 });
 
-export type Premise = z.infer<typeof PremiseSchema>;
+/** 兼容历史产物；新生成的种子仍使用要求 storyEngine 的 PremiseSchema。 */
+export const PremiseReadSchema = PremiseSchema.extend({
+  storyEngine: StoryEngineSchema.optional(),
+});
+export type Premise = z.infer<typeof PremiseReadSchema>;
+export type GeneratedPremise = z.infer<typeof PremiseSchema>;
 
 // ---------------- 世界观与人物 ----------------
 
@@ -320,6 +348,16 @@ export interface StageContext {
   premise?: Premise;
   world?: Record<string, unknown>;
   characters?: Character[];
+  characterRefs?: Array<{ id: string; name: string }>;
+  relations?: Array<{
+    fromId: string;
+    toId: string;
+    type: string;
+    fromRole: string;
+    toRole: string;
+    description: string;
+  }>;
+  outline?: { plan: OutlinePlan; chapters: ChapterSummary[] };
 }
 
 // ---------------- 项目读取契约（工作台前端消费） ----------------
@@ -429,6 +467,7 @@ export interface StageExecutionState {
 }
 
 export interface ProjectDetail {
+  outlineProgress?: OutlineProgress | null;
   stageStates?: Partial<Record<Stage, StageExecutionState>>;
   id: string;
   title: string;
@@ -446,6 +485,8 @@ export interface ProjectDetail {
   completionTokens: number;
   createdAt: string;
   updatedAt: string;
+  /** 软删除时刻：非空表示该项目已移入回收站 */
+  deletedAt: string | null;
   premise: PremiseArtifact | null;
   world: WorldArtifact | null;
   characters: CharacterRow[];
@@ -463,4 +504,98 @@ export interface ProjectSummary {
   status: ProjectStatus;
   createdAt: string;
   updatedAt: string;
+  /** 软删除时刻：非空表示该项目已移入回收站 */
+  deletedAt: string | null;
+}
+
+/** GET /api/novel/projects?scope=trash 列表项（按删除时间倒序） */
+export type TrashProjectSummary = ProjectSummary & { deletedAt: string };
+
+// ---------------- 大纲：模型内容、编辑请求与读取契约 ----------------
+const OutlineTextSchema = z.string().trim().min(1);
+export const TargetChaptersSchema = z.number().int().positive().safe();
+export const OutlineSegmentSchema = z.object({
+  id: OutlineTextSchema,
+  title: OutlineTextSchema,
+  goal: OutlineTextSchema,
+  events: OutlineTextSchema,
+  outcome: OutlineTextSchema,
+  startChapter: TargetChaptersSchema,
+  endChapter: TargetChaptersSchema,
+});
+export const OutlinePlanSchema = z.object({
+  mainline: OutlineTextSchema,
+  turningPoints: z.array(OutlineTextSchema).min(1),
+  climax: OutlineTextSchema,
+  ending: OutlineTextSchema,
+  characterArcs: z
+    .array(z.object({ characterId: OutlineTextSchema, development: OutlineTextSchema }))
+    .min(1),
+  relationDevelopments: z.array(
+    z.object({
+      fromId: OutlineTextSchema,
+      toId: OutlineTextSchema,
+      development: OutlineTextSchema,
+    }),
+  ),
+  segments: z.array(OutlineSegmentSchema).min(1),
+});
+export const ChapterSummarySchema = z.object({
+  number: TargetChaptersSchema,
+  segmentId: OutlineTextSchema,
+  title: OutlineTextSchema,
+  events: OutlineTextSchema,
+  characterIds: z.array(OutlineTextSchema).min(1),
+  conflict: OutlineTextSchema,
+  outcome: OutlineTextSchema,
+  consequence: OutlineTextSchema,
+  foreshadowing: z.string().optional(),
+  relationChange: z.string().optional(),
+});
+export const ChapterBatchSchema = z.object({ chapters: z.array(ChapterSummarySchema).min(1) });
+export type OutlinePlan = z.infer<typeof OutlinePlanSchema>;
+export type ChapterSummary = z.infer<typeof ChapterSummarySchema>;
+export const OutlineConfigBodySchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  targetChapters: TargetChaptersSchema,
+});
+export const OutlinePlanBodySchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  plan: OutlinePlanSchema,
+});
+export const OutlineChapterBodySchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  chapter: ChapterSummarySchema,
+});
+export type OutlineConfirm = { target: 'outline-plan' | 'outline'; expectedRevision: number };
+export const OUTLINE_STEPS = [
+  'planning',
+  'plan_review',
+  'expanding',
+  'outline_review',
+  'confirmed',
+] as const;
+export interface OutlineProgress {
+  step: (typeof OUTLINE_STEPS)[number];
+  revision: number;
+  planRevision: number;
+  targetChapters: number;
+  planConfirmedRevision: number | null;
+  confirmedRevision: number | null;
+  stale: boolean;
+  completedChapters: number;
+  completedBatches: number;
+  totalBatches: number;
+  error: string | null;
+}
+export interface OutlineDetail extends OutlineProgress {
+  plan: OutlinePlan | null;
+  chapters: ChapterSummary[];
+  batches: Array<{
+    startChapter: number;
+    endChapter: number;
+    status: string;
+    error: string | null;
+  }>;
+  staleChapters: ChapterSummary[];
 }

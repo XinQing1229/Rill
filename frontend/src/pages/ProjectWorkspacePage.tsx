@@ -53,7 +53,7 @@ export function ProjectWorkspacePage() {
       if (successMessage) message.success(successMessage);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        message.warning('正在生成中，请稍候');
+        message.warning(e.message || '项目状态已变化，请刷新后重试');
         await refresh();
         restartPolling();
       } else {
@@ -93,6 +93,7 @@ export function ProjectWorkspacePage() {
   const currentState = readStageState(project, project.currentStage);
   const currentImplemented = isImplementedStage(project.currentStage);
   const canConfirm =
+    project.currentStage !== 'outline' &&
     project.mode === 'manual' &&
     currentImplemented &&
     currentState?.status === 'done' &&
@@ -119,6 +120,7 @@ export function ProjectWorkspacePage() {
         )}
         <div className="right">
           <Segmented
+            disabled={busy || project.status === 'running'}
             value={project.mode}
             onChange={(value) => handleModeChange(value as PipelineMode)}
             options={[
@@ -156,6 +158,10 @@ export function ProjectWorkspacePage() {
               project={project}
               stage={stage}
               busy={busy}
+              onOutlineRefresh={() => {
+                void refresh();
+                restartPolling();
+              }}
               onGenerate={(force) =>
                 void runAction(
                   () => generateStage(project.id, force ? { force: true } : {}),

@@ -14,6 +14,12 @@ export const premiseData: Premise = {
   logline: '守碑人少女与碑中古战魂同行北上，修复断裂的边境碑阵。',
   theme: '记忆与代价',
   coreConflict: '修复碑阵需要以战魂的记忆为薪',
+  storyEngine: {
+    openingGoal: '在北境失守前修复第一面碑阵',
+    mainObstacle: '每次修复都会消耗战魂的一段记忆',
+    failureCost: '边关失守，亡兄也将彻底消散',
+    escalationPath: ['第一面碑无法稳固', '守碑司下令封锁碑阵'],
+  },
   protagonist: {
     name: '沈青偃',
     identity: '守碑人',
@@ -129,6 +135,7 @@ export function makeProject(overrides: Partial<ProjectDetail> = {}): ProjectDeta
     completionTokens: 0,
     createdAt: '2026-01-01T09:00:00.000Z',
     updatedAt: '2026-01-01T10:01:00.000Z',
+    deletedAt: null,
     premise: makePremiseRow({ status: 'pending', data: '{}' }),
     world: null,
     characters: [],
@@ -148,6 +155,7 @@ export function makeSummary(overrides: Partial<ProjectSummary> = {}): ProjectSum
     status: 'idle',
     createdAt: '2026-01-01T09:00:00.000Z',
     updatedAt: '2026-01-01T10:01:00.000Z',
+    deletedAt: null,
     ...overrides,
   };
 }

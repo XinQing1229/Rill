@@ -19,8 +19,9 @@ function aggregate(rows: Array<{ status: string; stale: boolean }>): StageState 
   if (rows.length === 0) return undefined;
   const allDone = rows.every((row) => row.status === 'done');
   const anyFailed = rows.some((row) => row.status === 'failed');
+  const anyGenerating = rows.some((row) => row.status === 'generating');
   return {
-    status: allDone ? 'done' : anyFailed ? 'failed' : 'generating',
+    status: allDone ? 'done' : anyFailed ? 'failed' : anyGenerating ? 'generating' : 'pending',
     stale: rows.some((row) => row.stale),
   };
 }
@@ -46,6 +47,13 @@ export function readStageState(project: ProjectDetail, stage: Stage): StageState
  * characters 是否依赖 world 由类型的阶段列表决定——跳过世界观的类型只依赖种子）
  */
 export function upstreamRequires(stage: Stage, projectStages: Stage[]): Stage[] {
+  if (stage === 'outline')
+    return [
+      'premise',
+      ...(projectStages.includes('world') ? ['world' as Stage] : []),
+      'characters',
+      'relations',
+    ];
   if (stage === 'world') return ['premise'];
   if (stage === 'characters') {
     return projectStages.includes('world') ? ['premise', 'world'] : ['premise'];
@@ -96,7 +104,7 @@ export function isPollingSettled(project: ProjectDetail): boolean {
 }
 
 /** 本 change 范围内的阶段：种子 → 世界观 → 人物（按类型的阶段列表过滤，跳过的阶段不出现） */
-export const IN_SCOPE_STAGES: Stage[] = ['premise', 'world', 'characters'];
+export const IN_SCOPE_STAGES: Stage[] = ['premise', 'world', 'characters', 'outline'];
 
 export function timelineStages(projectStages: Stage[]): Stage[] {
   return IN_SCOPE_STAGES.filter((stage) => projectStages.includes(stage));

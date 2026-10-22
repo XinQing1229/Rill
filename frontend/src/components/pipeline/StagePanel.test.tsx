@@ -163,7 +163,7 @@ describe('StagePanel 状态分流', () => {
     render(
       <StagePanel
         project={project}
-        stage="outline"
+        stage="beats"
         busy={false}
         onGenerate={noop}
         onConfirm={noop}

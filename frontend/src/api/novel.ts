@@ -1,3 +1,4 @@
+import type { OutlineDetail, OutlinePlan, ChapterSummary, OutlineConfirm } from '@rill/shared';
 import type { z } from 'zod';
 import type {
   CharacterRow,
@@ -6,6 +7,7 @@ import type {
   Genre,
   PipelineMode,
   ProjectDetail,
+  ProjectScope,
   ProjectSummary,
   QuestionnaireAnswers,
   QuestionnaireDefinition,
@@ -13,7 +15,7 @@ import type {
   Stage,
 } from '@rill/shared';
 import { CreateProjectSchema, GenerateBodySchema } from '@rill/shared';
-import { get, post } from './client';
+import { del, get, post, patch } from './client';
 
 type CreateProjectBody = z.infer<typeof CreateProjectSchema>;
 type GenerateBody = z.infer<typeof GenerateBodySchema>;
@@ -30,9 +32,29 @@ export function createProject(body: CreateProjectBody): Promise<ProjectDetail> {
   return post(`${base}/projects`, body);
 }
 
-/** 项目列表（按更新时间倒序） */
-export function listProjects(): Promise<ProjectSummary[]> {
-  return get(`${base}/projects`);
+/** 项目列表（scope=trash 时为回收站，按删除时间倒序） */
+export function listProjects(scope: ProjectScope = 'active'): Promise<ProjectSummary[]> {
+  return get(`${base}/projects${scope === 'trash' ? '?scope=trash' : ''}`);
+}
+
+/** 软删除：移入回收站，产物保留可恢复 */
+export function deleteProject(id: string): Promise<ProjectSummary> {
+  return del(`${base}/projects/${id}`);
+}
+
+/** 从回收站恢复 */
+export function restoreProject(id: string): Promise<ProjectDetail> {
+  return post(`${base}/projects/${id}/restore`);
+}
+
+/** 永久删除回收站项目（不可恢复） */
+export function purgeProject(id: string): Promise<{ id: string; purged: boolean }> {
+  return del(`${base}/projects/${id}/permanent`);
+}
+
+/** 清空回收站 */
+export function clearTrash(): Promise<{ removed: number }> {
+  return del(`${base}/projects?scope=trash`);
 }
 
 /** 项目详情（含各阶段产物行与完整阶段列表） */
@@ -80,4 +102,35 @@ export function parseAnswers(project: ProjectDetail): QuestionnaireAnswers {
   } catch {
     throw new Error('问卷答案数据损坏，无法解析');
   }
+}
+
+export function getOutline(id: string): Promise<OutlineDetail> {
+  return get(`${base}/projects/${id}/outline`);
+}
+export function configureOutline(
+  id: string,
+  expectedRevision: number,
+  targetChapters: number,
+): Promise<OutlineDetail> {
+  return patch(`${base}/projects/${id}/outline/config`, { expectedRevision, targetChapters });
+}
+export function saveOutlinePlan(
+  id: string,
+  expectedRevision: number,
+  plan: OutlinePlan,
+): Promise<OutlineDetail> {
+  return patch(`${base}/projects/${id}/outline/plan`, { expectedRevision, plan });
+}
+export function saveOutlineChapter(
+  id: string,
+  expectedRevision: number,
+  chapter: ChapterSummary,
+): Promise<OutlineDetail> {
+  return patch(`${base}/projects/${id}/outline/chapters/${chapter.number}`, {
+    expectedRevision,
+    chapter,
+  });
+}
+export function confirmOutline(id: string, confirmation: OutlineConfirm): Promise<ProjectDetail> {
+  return post(`${base}/projects/${id}/confirm`, confirmation);
 }

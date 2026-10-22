@@ -1,7 +1,8 @@
+import { OutlineWorkbench } from '../outline/OutlineWorkbench';
 import { Alert, Button, Popconfirm, Skeleton } from 'antd';
 import type { ZodType } from 'zod';
 import {
-  PremiseSchema,
+  PremiseReadSchema,
   STAGE_LABELS,
   worldSchemaFor,
   type ProjectDetail,
@@ -46,13 +47,30 @@ interface Props {
   project: ProjectDetail;
   stage: Stage;
   busy: boolean;
+  onOutlineRefresh?: () => void;
   onGenerate: (force: boolean) => void;
   onConfirm: () => void;
   onRollback: (stage: Stage) => void;
 }
 
 /** 阶段面板：按状态分流（待生成 / 生成中 / 已完成 / 失败 / 已失效） */
-export function StagePanel({ project, stage, busy, onGenerate, onConfirm, onRollback }: Props) {
+export function StagePanel({
+  project,
+  stage,
+  busy,
+  onGenerate,
+  onConfirm,
+  onRollback,
+  onOutlineRefresh,
+}: Props) {
+  if (stage === 'outline')
+    return (
+      <OutlineWorkbench
+        project={project}
+        onChanged={onOutlineRefresh}
+        onRollback={() => onRollback('outline')}
+      />
+    );
   if (!isImplementedStage(stage)) {
     return (
       <div className="node">
@@ -75,7 +93,7 @@ export function StagePanel({ project, stage, busy, onGenerate, onConfirm, onRoll
 
   const renderArtifact = () => {
     if (stage === 'premise') {
-      const parsed = parseData(PremiseSchema, project.premise);
+      const parsed = parseData(PremiseReadSchema, project.premise);
       if (parsed === null) return null;
       return parsed.ok ? (
         <PremiseView premise={parsed.data} />
@@ -91,7 +109,7 @@ export function StagePanel({ project, stage, busy, onGenerate, onConfirm, onRoll
       const parsed = parseData(worldSchema, project.world);
       if (parsed === null) return null;
       if (!parsed.ok) return <Alert type="error" showIcon message={parsed.error} />;
-      const premiseParsed = parseData(PremiseSchema, project.premise);
+      const premiseParsed = parseData(PremiseReadSchema, project.premise);
       return (
         <WorldView
           world={parsed.data as Record<string, unknown>}

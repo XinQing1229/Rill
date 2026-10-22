@@ -19,6 +19,15 @@ export function renderUpstreamContext(context: StageContext): string {
         `梗概：${premise.logline}`,
         `主题：${premise.theme}`,
         `核心冲突：${premise.coreConflict}`,
+        premise.storyEngine
+          ? [
+              '【故事发动机】',
+              `开篇目标：${premise.storyEngine.openingGoal}`,
+              `主要阻力：${premise.storyEngine.mainObstacle}`,
+              `失败代价：${premise.storyEngine.failureCost}`,
+              `压力升级：${premise.storyEngine.escalationPath.join(' → ')}`,
+            ].join('\n')
+          : '',
         protagonist
           ? `主角：${protagonist.name}｜${protagonist.identity}｜想要：${protagonist.desire}｜软肋：${protagonist.flaw}`
           : '主角：（未设定）',
@@ -55,7 +64,7 @@ export function renderUpstreamContext(context: StageContext): string {
     const lines = ['【已确认人物】'];
     for (const character of context.characters) {
       lines.push(
-        `- ${character.name}（${character.role}）：${character.identity}｜想要：${character.desire}｜软肋：${character.flaw}`,
+        `- ${character.name}（${character.role}）：${character.identity}｜目标：${character.desire}｜软肋：${character.flaw}｜弧光：${character.arc}`,
       );
     }
     sections.push(lines.join('\n'));

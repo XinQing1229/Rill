@@ -1,3 +1,4 @@
+import { OutlineService } from './outline/outline.service.js';
 import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module.js';
 import { PrismaService } from './prisma.service.js';
@@ -24,6 +25,7 @@ import { NovelController } from './novel.controller.js';
     CharacterGenerator,
     RelationGenerator,
     PipelineService,
+    OutlineService,
   ],
   exports: [PipelineService],
 })

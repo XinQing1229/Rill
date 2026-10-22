@@ -1,6 +1,6 @@
 import type { Premise } from '@rill/shared';
 
-/** 种子产物：严格按 PremiseSchema 结构展示，不自造字段 */
+/** 种子产物按兼容读取契约展示，不自造字段 */
 export function PremiseView({ premise }: { premise: Premise }) {
   return (
     <div>
@@ -20,6 +20,31 @@ export function PremiseView({ premise }: { premise: Premise }) {
         <dt>卖点 / 钩子</dt>
         <dd>{premise.hook}</dd>
       </dl>
+
+      {premise.storyEngine && (
+        <>
+          <div className="block-title">
+            <h3>故事发动机</h3>
+            <span className="meta">目标、阻力与逐步升级的代价</span>
+          </div>
+          <dl className="kv wide-lead">
+            <dt>开篇目标</dt>
+            <dd>{premise.storyEngine.openingGoal}</dd>
+            <dt>主要阻力</dt>
+            <dd>{premise.storyEngine.mainObstacle}</dd>
+            <dt>失败代价</dt>
+            <dd>{premise.storyEngine.failureCost}</dd>
+            <dt>压力升级</dt>
+            <dd>
+              <ol>
+                {premise.storyEngine.escalationPath.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </dd>
+          </dl>
+        </>
+      )}
 
       <div className="block-title">
         <h3>主角</h3>

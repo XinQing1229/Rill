@@ -1,3 +1,6 @@
+import { Command } from '@langchain/langgraph';
+import { OutlineService } from '../outline/outline.service.js';
+import type { OutlineConfirm } from '@rill/shared';
 import { executionContext } from './execution-context.js';
 import {
   BadRequestException,
@@ -6,11 +9,18 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import type { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
-import { ArtifactStatus, PipelineMode, QuestionnaireAnswers, Stage } from '@rill/shared';
+import {
+  ArtifactStatus,
+  PipelineMode,
+  ProjectScope,
+  QuestionnaireAnswers,
+  Stage,
+} from '@rill/shared';
 import { PrismaService } from '../prisma.service.js';
 import { profileFor, stagesFor } from '../genre/genre-profile.js';
 import {
@@ -19,9 +29,14 @@ import {
 } from '../questionnaire/questionnaire.js';
 import { ArtifactRegistry } from './artifact.registry.js';
 import { UpstreamAssembler } from './upstream.assembler.js';
-import { compilePipelineGraph, PipelineState, StageRunner } from './pipeline.graph.js';
-import { createStageRunner, markDownstreamStale, setStageStatus } from './stage.runner.js';
-import { createCheckpointer } from './checkpointer.js';
+import {
+  compilePipelineGraph,
+  PipelineState,
+  StageRunner,
+  type PipelineNode,
+} from './pipeline.graph.js';
+import { createStageRunner, markDownstreamStale } from './stage.runner.js';
+import { createCheckpointer, deleteCheckpointThread } from './checkpointer.js';
 
 export interface CreateProjectInput {
   title: string;
@@ -40,6 +55,19 @@ const TIMEOUT_MARK = Symbol('generation-timeout');
 /** 确认入口的动作：继续推进 / 重新生成当前阶段 */
 export type ConfirmAction = 'confirm' | 'regenerate';
 
+/** 取流程顺序更靠后的阶段；不在阶段列表中的取值视为无效并忽略 */
+function laterStage(a: Stage, b: Stage | undefined, stages: Stage[]): Stage {
+  if (!b || !stages.includes(b)) return a;
+  if (!stages.includes(a)) return b;
+  return stages.indexOf(b) > stages.indexOf(a) ? b : a;
+}
+
+/**
+ * 可见性条件：回收站中的项目（`deletedAt` 非空）对所有默认读路径不可见。
+ * 所有面向创作的读写都必须带上它，避免恢复前读到或修改已删除项目的数据。
+ */
+const VISIBLE_PROJECT = { deletedAt: null };
+
 @Injectable()
 export class PipelineService implements OnModuleInit {
   private readonly logger = new Logger(PipelineService.name);
@@ -54,18 +82,20 @@ export class PipelineService implements OnModuleInit {
     private readonly artifacts: ArtifactRegistry,
     private readonly assembler: UpstreamAssembler,
     private readonly config: ConfigService,
+    @Optional() private readonly outline?: OutlineService,
   ) {
     this.runner = createStageRunner({ prisma, assembler, artifacts });
   }
 
   async onModuleInit(): Promise<void> {
     await this.prisma.stageRun.updateMany({
-      where: { status: 'generating' },
+      // 回收站项目冻结：不参与重启时的中断清理
+      where: { status: 'generating', project: VISIBLE_PROJECT },
       data: { status: 'failed', error: '服务重启中断了生成，请重试' },
     });
     // 释放被中断的运行锁：执行进度仍保留在 checkpointer，再次触发即从中断处继续
     const result = await this.prisma.project.updateMany({
-      where: { status: 'running' },
+      where: { status: 'running', ...VISIBLE_PROJECT },
       data: { status: 'failed', runId: null },
     });
     if (result.count > 0) {
@@ -104,8 +134,9 @@ export class PipelineService implements OnModuleInit {
   }
 
   async get(id: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id },
+    // 回收站中的项目按「不可见」处理：findFirst + 可见性条件而非 findUnique
+    const project = await this.prisma.project.findFirst({
+      where: { id, ...VISIBLE_PROJECT },
       include: {
         premise: true,
         world: true,
@@ -145,14 +176,17 @@ export class PipelineService implements OnModuleInit {
           ];
         }),
       ),
+      outlineProgress: (await this.outline?.progress(id)) ?? null,
       stages: stagesFor(project.genre as QuestionnaireAnswers['genre']),
     };
   }
 
-  /** 项目列表（列表页用，按更新时间倒序） */
-  async list() {
+  /** 项目列表（列表页用）：默认按更新时间倒序，回收站按删除时间倒序 */
+  async list(scope: ProjectScope = 'active') {
+    const trash = scope === 'trash';
     return this.prisma.project.findMany({
-      orderBy: { updatedAt: 'desc' },
+      where: trash ? { deletedAt: { not: null } } : VISIBLE_PROJECT,
+      orderBy: trash ? { deletedAt: 'desc' } : { updatedAt: 'desc' },
       select: {
         id: true,
         title: true,
@@ -163,8 +197,89 @@ export class PipelineService implements OnModuleInit {
         status: true,
         createdAt: true,
         updatedAt: true,
+        deletedAt: true,
       },
     });
+  }
+
+  /**
+   * 软删除：仅标记删除时刻，产物、阶段状态与问答保持不变。
+   * 单次写入判定三态：不存在/已删除为 404，运行中（可能与删除并发）为 409。
+   */
+  async softDelete(id: string) {
+    const marked = await this.prisma.project.updateMany({
+      where: { id, deletedAt: null, status: { not: 'running' }, runId: null },
+      data: { deletedAt: new Date() },
+    });
+    if (marked.count !== 1) {
+      const existing = await this.prisma.project.findUnique({ where: { id } });
+      if (!existing || existing.deletedAt) throw new NotFoundException(`项目不存在: ${id}`);
+      throw new ConflictException('项目正在生成，请稍后删除');
+    }
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        genre: true,
+        length: true,
+        mode: true,
+        currentStage: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        deletedAt: true,
+      },
+    });
+    return project;
+  }
+
+  /** 从回收站恢复：清空删除时刻，项目连同产物与进度回到创作列表 */
+  async restore(id: string) {
+    const restored = await this.prisma.project.updateMany({
+      where: { id, deletedAt: { not: null } },
+      data: { deletedAt: null },
+    });
+    if (restored.count !== 1) throw new NotFoundException(`回收站中不存在该项目: ${id}`);
+    return this.get(id);
+  }
+
+  /** 永久删除单个回收站项目：级联产物 + 独立用量记录 + 流水线快照 */
+  async purge(id: string) {
+    const target = await this.prisma.project.findUnique({
+      where: { id },
+      select: { deletedAt: true },
+    });
+    if (!target?.deletedAt) throw new NotFoundException(`回收站中不存在该项目: ${id}`);
+    await this.purgeProject(id);
+    return { id, purged: true };
+  }
+
+  /** 清空回收站：逐个永久删除，返回清理数量 */
+  async clearTrash() {
+    const targets = await this.prisma.project.findMany({
+      where: { deletedAt: { not: null } },
+      select: { id: true },
+    });
+    for (const target of targets) {
+      await this.purgeProject(target.id);
+    }
+    return { removed: targets.length };
+  }
+
+  /** 物理清理：Prisma 部分在事务内，checkpoint 在独立 SQLite，失败仅告警 */
+  private async purgeProject(id: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // OutlineUsage 没有外键，不会被级联，必须显式清理以免留下孤儿行
+      await tx.outlineUsage.deleteMany({ where: { projectId: id } });
+      await tx.project.delete({ where: { id } });
+    });
+    try {
+      await deleteCheckpointThread(this.checkpointer, id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`项目 ${id} 的流水线快照清理失败（不影响删除结果）: ${message}`);
+    }
   }
 
   /**
@@ -185,7 +300,12 @@ export class PipelineService implements OnModuleInit {
 
     const artifactState = this.assembler.readStageState(project, stage);
     // 已生效（完成且未失效）的产物不重复生成
-    if (artifactState?.status === 'done' && !artifactState.stale && !options.force) {
+    if (
+      stage !== 'outline' &&
+      artifactState?.status === 'done' &&
+      !artifactState.stale &&
+      !options.force
+    ) {
       return { stage, status: artifactState.status, started: false };
     }
 
@@ -195,7 +315,7 @@ export class PipelineService implements OnModuleInit {
         // 打破幂等，使该阶段重新生成（下游失效由节点内统一处理）；
         // 同时清除中断点，否则会恢复到下一阶段而不是重跑本阶段
         await this.artifacts.setStale(stage, id, true);
-        await this.checkpointer.deleteThread(id);
+        await deleteCheckpointThread(this.checkpointer, id);
       }
     } catch (error) {
       await this.prisma.project.updateMany({
@@ -223,9 +343,37 @@ export class PipelineService implements OnModuleInit {
   }
 
   /** 手动模式：确认当前阶段后恢复图，推进到下一阶段 */
-  async confirm(id: string, action: ConfirmAction = 'confirm') {
+  async confirm(id: string, action: ConfirmAction = 'confirm', confirmation?: OutlineConfirm) {
     const project = await this.get(id);
     const stage = project.currentStage as Stage;
+    let effectiveAction = action;
+    if (confirmation || (stage === 'outline' && action === 'confirm' && this.outline)) {
+      if (!confirmation || !this.outline)
+        throw new BadRequestException('大纲确认必须指定目标和内容版本');
+      const decision = await this.outline.checkConfirm(id, confirmation);
+      // 幂等重复确认：内容已按当前版本确认且流程已离开大纲，不重复派发模型请求
+      if (decision === 'skip') return this.get(id);
+      if (decision === 'commit') {
+        if (stage !== 'outline') throw new BadRequestException('请先回退到大纲阶段');
+        const runId = await this.acquireRun(project);
+        try {
+          await this.runGraph(
+            id,
+            JSON.parse(project.answers),
+            project.mode as PipelineMode,
+            'outline',
+            confirmation,
+          );
+          return this.get(id);
+        } finally {
+          await this.releaseRun(id, runId);
+        }
+      }
+      // decision === 'advance'：大纲内容已是当前最终确认版本，且仍停留在大纲阶段
+      // （作者回退后未修改即确认）。沿用既有“回退后一次确认即推进”语义：
+      // 不重跑大纲，直接从下一阶段继续推进。
+      effectiveAction = 'confirm';
+    }
 
     const state = this.assembler.readStageState(project, stage);
     if (!state || state.status !== 'done') {
@@ -241,13 +389,13 @@ export class PipelineService implements OnModuleInit {
 
     const runId = await this.acquireRun(project);
     try {
-      if (action === 'regenerate') {
+      if (effectiveAction === 'regenerate') {
         // 重新生成：使本阶段失效，并清除中断点，使图从本阶段重新开始
         await this.artifacts.setStale(stage, id, true);
-        await this.checkpointer.deleteThread(id);
+        await deleteCheckpointThread(this.checkpointer, id);
       }
 
-      if (action === 'confirm')
+      if (effectiveAction === 'confirm')
         await this.prisma.stageRun.updateMany({
           where: { projectId: id, stage, stale: false, status: 'done' },
           data: { confirmedAt: new Date() },
@@ -255,7 +403,7 @@ export class PipelineService implements OnModuleInit {
       const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
       let startStage = stage;
       if (
-        action === 'confirm' &&
+        effectiveAction === 'confirm' &&
         !(await this.checkpointer.getTuple({ configurable: { thread_id: id } }))
       ) {
         const stages = stagesFor(answers.genre);
@@ -294,7 +442,7 @@ export class PipelineService implements OnModuleInit {
         project.genre as QuestionnaireAnswers['genre'],
       );
       // 清除执行快照，使下次启动从入口路由按新的 currentStage 开始
-      await this.checkpointer.deleteThread(id);
+      await deleteCheckpointThread(this.checkpointer, id);
       await this.prisma.project.update({
         where: { id },
         data: { currentStage: stage, status: 'idle' },
@@ -308,7 +456,13 @@ export class PipelineService implements OnModuleInit {
   async setMode(id: string, mode: PipelineMode) {
     const project = await this.get(id);
     const result = await this.prisma.project.updateMany({
-      where: { id, status: { not: 'running' }, runId: null, updatedAt: project.updatedAt },
+      where: {
+        id,
+        ...VISIBLE_PROJECT,
+        status: { not: 'running' },
+        runId: null,
+        updatedAt: project.updatedAt,
+      },
       data: { mode },
     });
     if (result.count !== 1) throw new ConflictException('项目正在运行或已变更，请刷新后重试');
@@ -358,12 +512,16 @@ export class PipelineService implements OnModuleInit {
     return runId;
   }
 
+  /** 释放运行权：项目已进入回收站时不再改写其状态，保持删除时刻的数据冻结 */
   private async releaseRun(id: string, runId: string): Promise<void> {
     await this.prisma.project.updateMany({
-      where: { id, runId, status: 'running' },
+      where: { id, runId, ...VISIBLE_PROJECT, status: 'running' },
       data: { status: 'failed' },
     });
-    await this.prisma.project.updateMany({ where: { id, runId }, data: { runId: null } });
+    await this.prisma.project.updateMany({
+      where: { id, runId, ...VISIBLE_PROJECT },
+      data: { runId: null },
+    });
   }
 
   /**
@@ -375,14 +533,18 @@ export class PipelineService implements OnModuleInit {
     answers: QuestionnaireAnswers,
     mode: PipelineMode,
     fallbackStage: Stage,
+    confirmation?: OutlineConfirm,
   ): Promise<void> {
     const owner = await this.prisma.project.findUniqueOrThrow({ where: { id } });
+    // 删除先于本次执行落地：直接中断，避免把结果写回回收站中的项目
+    if (owner.deletedAt) throw new Error('项目已进入回收站，已中止生成');
     const runId = owner.runId!;
     const controller = new AbortController();
     const stages = stagesFor(answers.genre);
     const graph = compilePipelineGraph({
       stages,
       runner: this.runner,
+      outlineNodes: this.outline?.nodes,
       checkpointer: new Proxy(this.checkpointer, {
         get: (target, property) => {
           const method = Reflect.get(target, property);
@@ -390,8 +552,12 @@ export class PipelineService implements OnModuleInit {
             return async (...args: unknown[]) => {
               controller.signal.throwIfAborted();
               const current = await this.prisma.project.findUnique({ where: { id } });
-              if (current?.runId !== runId || current.status !== 'running')
-                throw new Error('运行已失效，拒绝写入快照');
+              if (
+                current?.runId !== runId ||
+                current.status !== 'running' ||
+                current.deletedAt !== null
+              )
+                throw new Error('运行已失效或项目已进入回收站，拒绝写入快照');
               controller.signal.throwIfAborted();
               return Reflect.apply(method, target, args);
             };
@@ -404,10 +570,55 @@ export class PipelineService implements OnModuleInit {
     });
     const config = { configurable: { thread_id: id } };
 
-    const existing = await this.checkpointer.getTuple(config);
-    const input: PipelineState | null = existing
-      ? null
-      : { projectId: id, genre: answers.genre, mode, currentStage: fallbackStage, answers };
+    let existing = await this.checkpointer.getTuple(config);
+    let resume = confirmation;
+    if (fallbackStage === 'outline' && this.outline) {
+      const detail = await this.outline.get(id);
+      const snapshot = existing ? await graph.getState(config, { subgraphs: true }) : null;
+      const interrupts: Array<{ target?: string }> = [];
+      const collect = (value: unknown): void => {
+        if (!value || typeof value !== 'object') return;
+        const item = value as {
+          interrupts?: Array<{ value?: { target?: string } }>;
+          tasks?: unknown[];
+          state?: unknown;
+        };
+        for (const entry of item.interrupts ?? []) if (entry.value) interrupts.push(entry.value);
+        for (const task of item.tasks ?? []) collect(task);
+        if (item.state) collect(item.state);
+      };
+      collect(snapshot);
+      const target =
+        detail.step === 'plan_review'
+          ? 'outline-plan'
+          : detail.step === 'outline_review'
+            ? 'outline'
+            : null;
+      if (confirmation && !interrupts.some((i) => i.target === confirmation.target)) {
+        // 编辑导致旧暂停点不再适用；持运行权确认业务版本，再按持久化步骤重建当前大纲。
+        await executionContext.run({ projectId: id, runId, signal: controller.signal }, () =>
+          this.outline!.acceptConfirmation(id, confirmation.target, confirmation.expectedRevision),
+        );
+        await deleteCheckpointThread(this.checkpointer, id);
+        existing = undefined;
+        resume = undefined;
+      } else if (
+        !confirmation &&
+        existing &&
+        (detail.step === 'planning' ||
+          detail.stale ||
+          (target && !interrupts.some((i) => i.target === target)))
+      ) {
+        await deleteCheckpointThread(this.checkpointer, id);
+        existing = undefined;
+      }
+    }
+    const input =
+      resume && existing
+        ? new Command<OutlineConfirm, Partial<PipelineState>, PipelineNode>({ resume })
+        : existing
+          ? null
+          : { projectId: id, genre: answers.genre, mode, currentStage: fallbackStage, answers };
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<typeof TIMEOUT_MARK>((resolve) => {
@@ -429,21 +640,37 @@ export class PipelineService implements OnModuleInit {
       if (outcome === TIMEOUT_MARK) {
         controller.abort();
         const message = `生成超时（超过 ${Math.round(this.generationTimeoutMs / 60000)} 分钟），已中止并标记失败`;
-        await this.failProject(id, fallbackStage, message);
+        await this.failProject(id, fallbackStage, message, runId);
         throw new Error(message);
       }
 
-      // 同步执行进度（冗余写入，便于查询与前端展示）
+      // 同步执行进度（冗余写入，便于查询与前端展示）。
+      // 大纲节点内部暂停时父图状态仍是进入该节点前的阶段，
+      // 因此本次执行若已把 Project 阶段推进过，就以持久化的业务进度为准，
+      // 不能用父图旧状态覆盖节点写入的阶段。
+      const persisted = await this.prisma.project.findUnique({
+        where: { id },
+        select: { currentStage: true },
+      });
+      const advanced =
+        persisted?.currentStage && persisted.currentStage !== owner.currentStage
+          ? (persisted.currentStage as Stage)
+          : undefined;
+      const currentStage = laterStage(
+        outcome.state.currentStage ?? fallbackStage,
+        advanced,
+        stages,
+      );
       await this.prisma.project.updateMany({
-        where: { id, runId },
+        where: { id, runId, ...VISIBLE_PROJECT },
         data: {
-          currentStage: outcome.state.currentStage ?? fallbackStage,
-          status: outcome.state.currentStage === stages.at(-1) ? 'done' : 'idle',
+          currentStage,
+          status: currentStage === stages.at(-1) ? 'done' : 'idle',
         },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await this.failProject(id, fallbackStage, message);
+      await this.failProject(id, fallbackStage, message, runId);
       throw error;
     } finally {
       if (timer) clearTimeout(timer);
@@ -454,25 +681,29 @@ export class PipelineService implements OnModuleInit {
    * 标记项目失败。若阶段产物还停在 generating（如超时中断），补记为 failed；
    * 已由 runner 标记为 failed 的不再覆盖，避免误伤已完成阶段。
    */
-  private async failProject(id: string, fallbackStage: Stage, message?: string): Promise<void> {
-    const project = await this.prisma.project.findUnique({
-      where: { id },
-      include: {
-        premise: true,
-        world: true,
-        characters: true,
-        relations: true,
-        stageRuns: { orderBy: { updatedAt: 'desc' } },
-      },
-    });
-    if (!project) return;
-    const stage = (project.currentStage ?? fallbackStage) as Stage;
-    if (message) {
-      const state = this.assembler.readStageState(project, stage);
-      if (state?.status !== 'failed') {
-        await setStageStatus(this.prisma, id, stage, 'failed', message);
+  private async failProject(
+    id: string,
+    fallbackStage: Stage,
+    message?: string,
+    runId?: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const owned = await tx.project.updateMany({
+        where: { id, runId, ...VISIBLE_PROJECT, status: 'running' },
+        data: { status: 'failed' },
+      });
+      if (owned.count !== 1) return;
+      const project = await tx.project.findUniqueOrThrow({ where: { id } });
+      const stage = (project.currentStage ?? fallbackStage) as Stage;
+      if (message) {
+        await tx.stageRun.upsert({
+          where: { projectId_runId_stage: { projectId: id, runId: runId!, stage } },
+          create: { projectId: id, runId: runId!, stage, status: 'failed', error: message },
+          update: { status: 'failed', error: message },
+        });
+        const { storageFor } = await import('./stage-storage.js');
+        await storageFor(stage)?.write(tx, id, { status: 'failed', error: message });
       }
-    }
-    await this.prisma.project.update({ where: { id }, data: { status: 'failed' } });
+    });
   }
 }

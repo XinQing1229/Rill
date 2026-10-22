@@ -4,7 +4,7 @@ import { StageTimeline } from './StageTimeline';
 import { makeCharacterRow, makePremiseRow, makeProject } from '../../test/fixtures';
 
 describe('StageTimeline', () => {
-  it('渲染范围内的三个阶段与后续阶段预告', () => {
+  it('渲染含大纲的四个阶段与后续阶段预告', () => {
     const project = makeProject({
       premise: makePremiseRow(),
       characters: [makeCharacterRow('沈青偃', 'protagonist')],
@@ -13,6 +13,7 @@ describe('StageTimeline', () => {
     expect(screen.getByText('种子')).toBeInTheDocument();
     expect(screen.getByText('世界观')).toBeInTheDocument();
     expect(screen.getByText('人物')).toBeInTheDocument();
+    expect(screen.getByText('大纲')).toBeInTheDocument();
     expect(screen.getByText('后续阶段')).toBeInTheDocument();
   });
 
@@ -34,7 +35,7 @@ describe('StageTimeline', () => {
     });
     render(<StageTimeline project={project} viewedStage={null} onSelect={() => {}} />);
     expect(screen.getByText('已完成')).toBeInTheDocument(); // premise
-    expect(screen.getAllByText('待生成').length).toBe(2); // world 与 characters
+    expect(screen.getAllByText('待生成').length).toBe(3); // world、characters 与 outline
   });
 
   it('失效阶段显示已失效', () => {

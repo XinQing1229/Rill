@@ -97,6 +97,25 @@ describe('WorldGenerator', () => {
     ).not.toThrow();
   });
 
+  it('不同详略档位均要求设定制造剧情压力或机会', () => {
+    const { prompts } = setup();
+    const base = {
+      upstream: '【种子设定】',
+      genre: '玄幻',
+      genreTraits: '设定自洽',
+      tone: '厚重',
+    };
+    const light = prompts.render('world', 'v1', { ...base, tier: 'light' });
+    const detailed = prompts.render('world', 'v1', { ...base, tier: 'detailed' });
+
+    for (const prompt of [light, detailed]) {
+      expect(prompt).toContain('限制、代价、压力或可利用的机会');
+      expect(prompt).toContain('不要只罗列背景知识');
+    }
+    expect(light).toContain('只需产出');
+    expect(detailed).toContain('完整产出');
+  });
+
   it('时代与地点从种子继承，不由模型生成', async () => {
     const { generator, completeStructured, upsert, usage } = setup();
     completeStructured.mockImplementation(

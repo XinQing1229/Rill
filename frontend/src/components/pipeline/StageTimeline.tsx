@@ -129,11 +129,11 @@ export function StageTimeline({ project, viewedStage, onSelect, advance }: Props
       {/* 后续阶段：本 change 范围外，置灰预告 */}
       <div className="stage" style={{ paddingTop: advance !== undefined ? 0 : 8 }}>
         <span className="dot" style={{ borderStyle: 'dashed' }} />
-        <div className="st-key">outline → prose</div>
+        <div className="st-key">beats → prose</div>
         <div className="st-name" style={{ color: 'var(--faint)' }}>
           后续阶段
         </div>
-        <div className="st-sub">大纲 · 细纲 · 正文，即将开放</div>
+        <div className="st-sub">细纲 · 正文，即将开放</div>
       </div>
     </div>
   );

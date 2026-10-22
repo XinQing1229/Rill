@@ -1,55 +1,96 @@
 import type { Prisma } from '../../../generated/prisma/client.js';
-import type { ArtifactStatus, Stage, StageContext } from '@rill/shared';
+import {
+  OutlinePlanSchema,
+  ChapterBatchSchema,
+  type ArtifactStatus,
+  type Stage,
+  type StageContext,
+} from '@rill/shared';
 
 type Row = { status: string; stale: boolean; data?: string };
 export interface StageSnapshot {
   premise?: Row | null;
   world?: Row | null;
   characters?: Row[];
-  relations?: Row[];
+  relations?: Array<
+    Row & {
+      fromId?: string;
+      toId?: string;
+      type?: string;
+      fromRole?: string;
+      toRole?: string;
+      description?: string;
+    }
+  >;
+  outline?: {
+    stale: boolean;
+    revision: number;
+    confirmedRevision: number | null;
+    planData: string | null;
+    batches: Array<{ planRevision: number; status: string; data: string | null }>;
+    planRevision: number;
+  } | null;
 }
+
+/** 项目已进入回收站时，产物写入必须静默失效：删除期间的残留任务不得修改产物数据。 */
+const VISIBLE_PROJECT = { project: { deletedAt: null } };
 
 /** 阶段存储适配集中声明，runner 与上游装配无需识别具体产物表。 */
 export const STAGE_STORAGE = {
   premise: {
     invalidate: (tx: Prisma.TransactionClient, id: string, stale: boolean) =>
-      tx.premise.updateMany({ where: { projectId: id }, data: { stale } }),
+      tx.premise.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data: { stale } }),
     rows: (p: StageSnapshot) => (p.premise ? [p.premise] : []),
     write: (
       tx: Prisma.TransactionClient,
       id: string,
       data: { status: ArtifactStatus; error: string | null },
-    ) => tx.premise.updateMany({ where: { projectId: id }, data }),
+    ) => tx.premise.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data }),
   },
   world: {
     invalidate: (tx: Prisma.TransactionClient, id: string, stale: boolean) =>
-      tx.worldSetting.updateMany({ where: { projectId: id }, data: { stale } }),
+      tx.worldSetting.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data: { stale } }),
     rows: (p: StageSnapshot) => (p.world ? [p.world] : []),
     write: (
       tx: Prisma.TransactionClient,
       id: string,
       data: { status: ArtifactStatus; error: string | null },
-    ) => tx.worldSetting.updateMany({ where: { projectId: id }, data }),
+    ) => tx.worldSetting.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data }),
   },
   characters: {
     invalidate: (tx: Prisma.TransactionClient, id: string, stale: boolean) =>
-      tx.character.updateMany({ where: { projectId: id }, data: { stale } }),
+      tx.character.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data: { stale } }),
     rows: (p: StageSnapshot) => p.characters ?? [],
     write: (
       tx: Prisma.TransactionClient,
       id: string,
       data: { status: ArtifactStatus; error: string | null },
-    ) => tx.character.updateMany({ where: { projectId: id }, data }),
+    ) => tx.character.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data }),
+  },
+  outline: {
+    invalidate: (tx: Prisma.TransactionClient, id: string, stale: boolean) =>
+      tx.outline.updateMany({
+        where: { projectId: id, ...VISIBLE_PROJECT },
+        data: stale
+          ? { stale: true, confirmedRevision: null, planConfirmedRevision: null }
+          : { stale: false },
+      }),
+    rows: (_p: StageSnapshot): Row[] => [],
+    write: async (
+      _tx: Prisma.TransactionClient,
+      _id: string,
+      _data: { status: ArtifactStatus; error: string | null },
+    ) => {},
   },
   relations: {
     invalidate: (tx: Prisma.TransactionClient, id: string, stale: boolean) =>
-      tx.relation.updateMany({ where: { projectId: id }, data: { stale } }),
+      tx.relation.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data: { stale } }),
     rows: (p: StageSnapshot) => p.relations ?? [],
     write: (
       tx: Prisma.TransactionClient,
       id: string,
       data: { status: ArtifactStatus; error: string | null },
-    ) => tx.relation.updateMany({ where: { projectId: id }, data }),
+    ) => tx.relation.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data }),
   },
 } satisfies Partial<Record<Stage, unknown>>;
 
@@ -69,6 +110,37 @@ export function contextFor(snapshot: StageSnapshot): StageContext {
     Object.assign(context, {
       [stage]: stage === 'characters' || stage === 'relations' ? content : content[0],
     });
+  }
+  context.characterRefs = (snapshot.characters ?? [])
+    .filter((row) => row.status === 'done' && !row.stale)
+    .map((row) => {
+      const character = row as Row & { id: string; name: string };
+      return { id: character.id, name: character.name };
+    });
+  context.relations = (snapshot.relations ?? [])
+    .filter((row) => row.status === 'done' && !row.stale)
+    .map((row) => ({
+      fromId: row.fromId!,
+      toId: row.toId!,
+      type: row.type!,
+      fromRole: row.fromRole!,
+      toRole: row.toRole!,
+      description: row.description!,
+    }));
+  const outline = snapshot.outline;
+  if (
+    outline &&
+    !outline.stale &&
+    outline.confirmedRevision === outline.revision &&
+    outline.planData
+  ) {
+    context.outline = {
+      plan: OutlinePlanSchema.parse(JSON.parse(outline.planData)),
+      chapters: outline.batches
+        .filter((b) => b.planRevision === outline.planRevision && b.status === 'done' && b.data)
+        .flatMap((b) => ChapterBatchSchema.parse(JSON.parse(b.data!)).chapters)
+        .sort((a, b) => a.number - b.number),
+    };
   }
   return context;
 }

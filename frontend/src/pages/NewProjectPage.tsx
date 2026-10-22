@@ -136,9 +136,9 @@ export function NewProjectPage() {
   };
 
   const missingRequired = useMemo(() => {
-    return REQUIRED_ANSWER_FIELDS.filter((key) =>
-      key === 'genre' ? !genre : !values[key],
-    ).map((key) => REQUIRED_FIELD_LABELS[key]);
+    return REQUIRED_ANSWER_FIELDS.filter((key) => (key === 'genre' ? !genre : !values[key])).map(
+      (key) => REQUIRED_FIELD_LABELS[key],
+    );
   }, [genre, values]);
 
   const submit = async () => {

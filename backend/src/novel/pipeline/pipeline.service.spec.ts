@@ -173,7 +173,7 @@ describe('PipelineService', () => {
   it('必答项缺失时创建失败', async () => {
     await expect(
       service.create({ title: 'x', answers: { genre: 'xuanhuan' } as QuestionnaireAnswers }),
-    ).rejects.toThrow(/缺少必答项/);
+    ).rejects.toThrow(/还需填写：.*篇幅.*基调.*叙事视角/);
   });
 
   it('生成完成（等待）后产物状态为 done', async () => {

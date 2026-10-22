@@ -59,6 +59,11 @@ export default function registerConfiguration() {
         outputPerMTokens: numOrNull(process.env.LLM_PRICE_OUTPUT_PER_MTOKENS),
       },
     },
+    outline: {
+      callTimeoutMs: num(process.env.OUTLINE_CALL_TIMEOUT_MS, 120_000),
+      totalTimeoutMs: num(process.env.OUTLINE_TOTAL_TIMEOUT_MS, 480_000),
+      maxTokens: num(process.env.OUTLINE_MAX_TOKENS, 8192),
+    },
     pipeline: {
       // 流水线执行快照的 SQLite 库，独立于业务库 dev.db
       checkpointFile: process.env.CHECKPOINT_DB ?? 'file:./checkpoints.db',

@@ -1,7 +1,7 @@
 // ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
 const jest = import.meta.jest;
 
-import { Premise, QuestionnaireAnswers } from '@rill/shared';
+import { Premise, PremiseReadSchema, PremiseSchema, QuestionnaireAnswers } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
 import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
 import { AiConfig } from '../../ai/config/ai.config.js';
@@ -40,6 +40,12 @@ const sample: Premise = {
   logline: '南宋临安，被革职的仵作与女说书人联手破案。',
   theme: '真相与偏见',
   coreConflict: '市井仵作与权贵之间的真相之争',
+  storyEngine: {
+    openingGoal: '在行刑前找到能证明父亲无罪的验尸证据',
+    mainObstacle: '府衙封存案卷并禁止仵作复验',
+    failureCost: '父亲将被处决，旧案真相也会被掩埋',
+    escalationPath: ['关键证人失踪', '证据被权贵销毁'],
+  },
   protagonist: {
     name: '沈砚',
     identity: '被革职的仵作',
@@ -80,6 +86,20 @@ function setup() {
 }
 
 describe('PremiseGenerator', () => {
+  it('新种子要求完整故事发动机，历史种子仍可读取', () => {
+    const legacy = { ...sample };
+    Reflect.deleteProperty(legacy, 'storyEngine');
+    expect(PremiseSchema.safeParse(legacy).success).toBe(false);
+    expect(PremiseReadSchema.safeParse(legacy).success).toBe(true);
+    expect(PremiseSchema.safeParse(sample).success).toBe(true);
+    expect(
+      PremiseSchema.safeParse({
+        ...sample,
+        storyEngine: { ...sample.storyEngine, escalationPath: ['只写一步'] },
+      }).success,
+    ).toBe(false);
+  });
+
   it('声明阶段与上游依赖（无上游）', () => {
     const { generator } = setup();
     expect(generator.stage).toBe('premise');
@@ -141,6 +161,8 @@ describe('PremiseGenerator', () => {
     expect(prompt).toContain('紧张');
     expect(prompt).toContain('第三人称限知');
     expect(prompt).toContain('南宋临安推理');
+    expect(prompt).toContain('区分主角长期欲望与开篇目标');
+    expect(prompt).toContain('2 至 4 步');
   });
 
   it('未提供创意时提示词改为让模型自行构思', async () => {
@@ -151,6 +173,7 @@ describe('PremiseGenerator', () => {
 
     const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
     expect(messages[0].content).toContain('自行构思');
+    expect(messages[0].content).toContain('失败的具体代价');
   });
 
   it('生成失败时不写入产物', async () => {

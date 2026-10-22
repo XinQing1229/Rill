@@ -42,18 +42,32 @@ describe('UpstreamAssembler.readStageState', () => {
     expect(state).toEqual({ status: 'failed', stale: false });
   });
 
-  it('混合未完成状态时报 generating', () => {
+  it('存在生成中行时报 generating', () => {
     const state = assembler.readStageState(
       {
         characters: [
           { status: 'done', stale: false },
-          { status: 'pending', stale: false },
+          { status: 'generating', stale: false },
         ],
       },
       'characters',
     );
 
     expect(state).toEqual({ status: 'generating', stale: false });
+  });
+
+  it('全部为 pending 占位行时报 pending（而非 generating）', () => {
+    const state = assembler.readStageState(
+      {
+        characters: [
+          { status: 'pending', stale: false },
+          { status: 'pending', stale: false },
+        ],
+      },
+      'characters',
+    );
+
+    expect(state).toEqual({ status: 'pending', stale: false });
   });
 
   it('无任何记录时报 undefined', () => {

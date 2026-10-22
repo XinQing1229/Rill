@@ -1,7 +1,7 @@
 // ESM 下 jest 不注入全局对象，改用 import.meta.jest（@types/jest 已声明其类型）
 const jest = import.meta.jest;
 
-import { Premise, QuestionnaireAnswers } from '@rill/shared';
+import { CharacterListSchema, Premise, QuestionnaireAnswers } from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
 import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
 import { AiConfig } from '../../ai/config/ai.config.js';
@@ -111,7 +111,9 @@ describe('CharacterGenerator', () => {
 
   it('按篇幅配置的默认人数生成', async () => {
     const { generator, completeStructured, create, transaction } = setup();
-    completeStructured.mockResolvedValue(makeCharacters(4));
+    const result = makeCharacters(4);
+    expect(CharacterListSchema.safeParse(result).success).toBe(true);
+    completeStructured.mockResolvedValue(result);
 
     await generator.generate({ premise }, answers, 'p1');
 
@@ -119,6 +121,8 @@ describe('CharacterGenerator', () => {
     expect(create).toHaveBeenCalledTimes(4);
     const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
     expect(messages[0].content).toContain('4 个人物');
+    expect(messages[0].content).toContain('background 写与当前故事有关的经历或重要隐瞒');
+    expect(messages[0].content).toContain('至少一个关键人物的目标');
   });
 
   it('问卷人物数量选答覆盖默认人数', async () => {

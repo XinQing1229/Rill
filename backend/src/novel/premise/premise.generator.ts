@@ -1,6 +1,12 @@
 import { commitGeneration } from '../pipeline/execution-context.js';
 import { Injectable } from '@nestjs/common';
-import { Premise, PremiseSchema, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
+import {
+  GeneratedPremise,
+  PremiseSchema,
+  QuestionnaireAnswers,
+  Stage,
+  StageContext,
+} from '@rill/shared';
 import { LlmService } from '../../ai/llm.service.js';
 import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
 import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
@@ -51,7 +57,7 @@ export class PremiseGenerator implements StageGenerator {
     });
 
     const traceId = newTraceId();
-    const premise = await this.llm.completeStructured<Premise>(
+    const premise = await this.llm.completeStructured<GeneratedPremise>(
       PremiseSchema,
       [{ role: 'user', content: prompt }],
       { traceId, usage: 'draft' },

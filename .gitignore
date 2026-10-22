@@ -9,6 +9,8 @@ backend/generated/
 # database
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 
 # env (real keys live here, never commit)
 .env
