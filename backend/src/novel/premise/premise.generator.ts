@@ -45,6 +45,10 @@ export class PremiseGenerator implements StageGenerator {
     projectId: string,
   ): Promise<void> {
     const profile = profileFor(answers.genre);
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { title: true },
+    });
 
     const prompt = this.prompts.render('premise', 'v1', {
       genre: profile.label,
@@ -52,6 +56,7 @@ export class PremiseGenerator implements StageGenerator {
       tone: answers.tone,
       pov: answers.pov,
       length: LENGTH_LABEL[answers.length] ?? answers.length,
+      title: project.title,
       idea: answers.idea ?? '',
       taboos: (answers.taboos ?? []).join('、'),
     });

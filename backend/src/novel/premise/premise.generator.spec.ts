@@ -72,9 +72,10 @@ function setup() {
   const usage = new UsageRecorder(config);
   const premiseUpdate = jest.fn().mockResolvedValue({});
   const projectUpdate = jest.fn().mockResolvedValue({});
+  const projectFindUnique = jest.fn().mockResolvedValue({ title: '临安十二时' });
   const prisma = {
     premise: { update: premiseUpdate },
-    project: { update: projectUpdate },
+    project: { findUniqueOrThrow: projectFindUnique, update: projectUpdate },
   } as unknown as PrismaService;
   prisma.$transaction = jest.fn(async (write: unknown) =>
     (write as (tx: PrismaService) => Promise<void>)(prisma),
@@ -82,7 +83,16 @@ function setup() {
   const artifacts = new ArtifactRegistry();
   const generator = new PremiseGenerator(llm, prompts, usage, prisma, artifacts);
 
-  return { generator, completeStructured, premiseUpdate, projectUpdate, usage, prompts, artifacts };
+  return {
+    generator,
+    completeStructured,
+    premiseUpdate,
+    projectUpdate,
+    projectFindUnique,
+    usage,
+    prompts,
+    artifacts,
+  };
 }
 
 describe('PremiseGenerator', () => {
@@ -117,8 +127,18 @@ describe('PremiseGenerator', () => {
         tone: '紧张',
         pov: '第三人称限知',
         length: '短篇',
+        title: '临安十二时',
       }),
     ).not.toThrow();
+    expect(() =>
+      prompts.render('premise', 'v1', {
+        genre: '悬疑',
+        genreTraits: '线索递进',
+        tone: '紧张',
+        pov: '第三人称限知',
+        length: '短篇',
+      }),
+    ).toThrow(/title/);
   });
 
   it('生成成功时写入产物数据并记录用量', async () => {
@@ -149,14 +169,18 @@ describe('PremiseGenerator', () => {
     expect(JSON.parse(premiseUpdate.mock.calls[0][0].data.data).title).toBe('临安十二时');
   });
 
-  it('提示词注入问卷答案（类型、基调、视角、创意）', async () => {
-    const { generator, completeStructured } = setup();
+  it('提示词注入问卷答案（类型、基调、视角、创意）与项目题目', async () => {
+    const { generator, completeStructured, projectFindUnique } = setup();
     completeStructured.mockResolvedValue(sample);
 
     await generator.generate({}, answers, 'project-1');
 
+    expect(projectFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'project-1' } }),
+    );
     const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
     const prompt = messages[0].content;
+    expect(prompt).toContain('作品题目：临安十二时');
     expect(prompt).toContain('悬疑');
     expect(prompt).toContain('紧张');
     expect(prompt).toContain('第三人称限知');

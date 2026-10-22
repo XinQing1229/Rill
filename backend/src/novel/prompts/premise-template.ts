@@ -8,7 +8,7 @@ import { PromptTemplate } from '../../ai/prompts/prompt.registry.js';
 export const premiseV1: PromptTemplate = {
   name: 'premise',
   version: 'v1',
-  requiredVariables: ['genre', 'genreTraits', 'tone', 'pov', 'length'],
+  requiredVariables: ['genre', 'genreTraits', 'tone', 'pov', 'length', 'title'],
   render(variables: Record<string, string>): string {
     const idea = variables.idea?.trim();
     const taboos = variables.taboos?.trim();
@@ -20,6 +20,8 @@ export const premiseV1: PromptTemplate = {
       '故事发动机必须具体可行动：区分主角长期欲望与开篇目标，写明主要阻力、失败的具体代价，并给出 2 至 4 步逐渐加重的压力路径。每一步都应由前一步引发或使目标更难达成，避免只写抽象情绪。',
       '开篇目标应能在故事开始时采取行动；阻力可以来自人物、势力、规则或处境；升级路径要让冲突逐步扩大或代价升高。',
       '',
+      `作品题目：${variables.title}`,
+      '作品题目由作者拟定，构思创意时必须与题目契合；输出的暂定书名可沿用题目或在其基础上微调，不要偏离题意。',
       `类型：${variables.genre}`,
       `类型特征：${variables.genreTraits}`,
       `篇幅：${variables.length}`,
@@ -27,7 +29,7 @@ export const premiseV1: PromptTemplate = {
       `叙事视角：${variables.pov}`,
       idea
         ? `作者的一句话创意：${idea}`
-        : '作者未提供具体创意，请你自行构思一个最适合该类型与基调的创意。',
+        : '作者未提供具体创意，请你结合作品题目自行构思一个最适合该类型与基调的创意。',
       taboos ? `需要避免的内容：${taboos}` : '',
       '',
       '请输出这部作品的种子设定。',
