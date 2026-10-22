@@ -23,7 +23,39 @@ import {
   upstreamBlockLabel,
   type StageState,
 } from '../../lib/stage';
-import { StageStatePill } from './StageTimeline';
+
+/** 阶段状态 pill：状态优先，done 上再区分失效 */
+export function StageStatePill({ state }: { state: StageState | undefined }) {
+  let label = '待生成';
+  let background = 'var(--active)';
+  let color = '#353736';
+  if (state) {
+    if (state.status === 'generating') {
+      label = '生成中';
+      background = '#e3f0f3';
+      color = '#155a6a';
+    } else if (state.status === 'failed') {
+      label = '失败';
+      background = '#ffedea';
+      color = '#831c1e';
+    } else if (state.status === 'done') {
+      if (state.stale) {
+        label = '已失效';
+        background = '#fffbeb';
+        color = '#92400e';
+      } else {
+        label = '已完成';
+        background = '#dcfae5';
+        color = '#04250e';
+      }
+    }
+  }
+  return (
+    <span className="pill" style={{ background, color }}>
+      {label}
+    </span>
+  );
+}
 
 type ParseResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -77,9 +109,7 @@ export function StagePanel({
         <header>
           <h2>{STAGE_LABELS[stage]}</h2>
         </header>
-        <div className="node-sub">
-          该阶段暂未开放：先完成种子、世界观与人物，大纲能力在后续 change 开放。
-        </div>
+        <div className="node-sub">该阶段暂未开放，将在后续 change 中开放。</div>
       </div>
     );
   }
@@ -119,18 +149,17 @@ export function StagePanel({
       );
     }
     if (stage === 'characters') {
+      // 关系网由紧随其后的 relations 阶段独立展示，这里不再重复渲染
+      return <CharacterView rows={project.characters} />;
+    }
+    if (stage === 'relations') {
       const nameOf = (cid: string) =>
         project.characters.find((row) => row.id === cid)?.name ?? '（已删除人物）';
       return (
         <div>
-          <CharacterView rows={project.characters} />
           <div className="block-title">
             <h3>关系网</h3>
-            <span className="meta">
-              {project.relations.length > 0
-                ? `${project.relations.length} 条 · 与人物一同重新生成`
-                : '与人物一同重新生成'}
-            </span>
+            <span className="meta">{project.relations.length} 条 · 依赖人物产物</span>
           </div>
           <RelationList relations={project.relations} nameOf={nameOf} />
         </div>
@@ -150,8 +179,24 @@ export function StagePanel({
               {project.characters.length} 位
             </span>
           )}
+          {stage === 'relations' && project.relations.length > 0 && (
+            <span className="num" style={{ fontWeight: 400, color: 'var(--faint)' }}>
+              {' '}
+              {project.relations.length} 条
+            </span>
+          )}
         </h2>
         <StageStatePill state={state} />
+        <span className="node-meta">
+          {tokens && updatedAt ? (
+            <>
+              生成于 {formatUpdatedAt(updatedAt)} ·{' '}
+              <span className="mono num">{formatTokens(tokens)}</span>
+            </>
+          ) : (
+            '尚未生成'
+          )}
+        </span>
         <div className="actions">
           {(status === 'failed' || (status === 'done' && stale)) && (
             <Button size="small" type="primary" loading={busy} onClick={() => onGenerate(true)}>
@@ -160,16 +205,6 @@ export function StagePanel({
           )}
         </div>
       </header>
-      <div className="node-sub">
-        {tokens && updatedAt ? (
-          <>
-            生成于 {formatUpdatedAt(updatedAt)} ·{' '}
-            <span className="mono num">{formatTokens(tokens)}</span>
-          </>
-        ) : (
-          '尚未生成'
-        )}
-      </div>
 
       {(status === 'pending' || state === undefined) && (
         <div>

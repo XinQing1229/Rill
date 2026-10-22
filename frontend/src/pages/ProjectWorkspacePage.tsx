@@ -1,14 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, App, Button, Segmented, Skeleton } from 'antd';
 import { Link, useParams } from 'react-router-dom';
-import { STAGE_LABELS, type PipelineMode, type Stage } from '@rill/shared';
+import { GENRE_LABELS, LENGTH_LABELS, STAGE_LABELS, type PipelineMode } from '@rill/shared';
 import { ApiError } from '../api/client';
 import { confirmStage, generateStage, parseAnswers, rollbackStage, setMode } from '../api/novel';
-import { StageTimeline } from '../components/pipeline/StageTimeline';
 import { StagePanel } from '../components/pipeline/StagePanel';
 import { StatusTag } from '../components/StatusTag';
 import { useProject } from '../hooks/useProject';
-import { chosenDimensionsLabel, isImplementedStage, readStageState } from '../lib/stage';
+import { useWorkspaceProject } from '../hooks/useWorkspaceProject';
+import { isImplementedStage, readStageState } from '../lib/stage';
 
 const backArrow = (
   <svg
@@ -29,9 +29,18 @@ const backArrow = (
 export function ProjectWorkspacePage() {
   const { id } = useParams<{ id: string }>();
   const { project, error, loading, refresh, restartPolling } = useProject(id);
+  const { setProject, viewedStage, setViewedStage } = useWorkspaceProject();
   const { message } = App.useApp();
-  const [viewedStage, setViewedStage] = useState<Stage | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // 项目数据发布给侧栏（卸载或加载失败时清空，「后续阶段」区随之隐藏）
+  useEffect(() => {
+    setProject(project);
+    return () => {
+      setProject(null);
+      setViewedStage(null);
+    };
+  }, [project, setProject, setViewedStage]);
 
   const answers = useMemo(() => {
     if (!project) return null;
@@ -41,6 +50,17 @@ export function ProjectWorkspacePage() {
       return null;
     }
   }, [project]);
+
+  /** 问卷已选维度（类型 · 篇幅 · 基调 · 视角），以 chips 展示 */
+  const dimensionChips = useMemo(() => {
+    if (!answers) return [];
+    return [
+      GENRE_LABELS[answers.genre] ?? answers.genre,
+      LENGTH_LABELS[answers.length] ?? answers.length,
+      answers.tone,
+      answers.pov,
+    ];
+  }, [answers]);
 
   const runAction = async (action: () => Promise<unknown>, successMessage?: string) => {
     setBusy(true);
@@ -138,45 +158,40 @@ export function ProjectWorkspacePage() {
 
       <div className="page">
         {answers !== null && (
-          <div className="sub" style={{ marginBottom: 16 }}>
-            问卷已选维度（只读）：{chosenDimensionsLabel(answers)}
+          <div style={{ marginBottom: 20 }}>
+            <p className="dim-caption">问卷已选维度（只读）</p>
+            <div className="dim-chips">
+              {dimensionChips.map((chip) => (
+                <span key={chip} className="dim-chip">
+                  {chip}
+                </span>
+              ))}
+            </div>
           </div>
         )}
-        <div className="work">
-          <StageTimeline
+        <div className="canvas-well">
+          <StagePanel
             project={project}
-            viewedStage={viewedStage}
-            onSelect={setViewedStage}
-            advance={
-              currentImplemented && project.currentStage === 'characters' && canConfirm
-                ? { disabled: busy, onClick: () => handleConfirm() }
-                : undefined
+            stage={stage}
+            busy={busy}
+            onOutlineRefresh={() => {
+              void refresh();
+              restartPolling();
+            }}
+            onGenerate={(force) =>
+              void runAction(
+                () => generateStage(project.id, force ? { force: true } : {}),
+                undefined,
+              )
+            }
+            onConfirm={() => handleConfirm()}
+            onRollback={(target) =>
+              void runAction(
+                () => rollbackStage(project.id, target),
+                `已回退到「${STAGE_LABELS[target]}」，其后阶段产物标记为失效`,
+              )
             }
           />
-          <div className="canvas-well">
-            <StagePanel
-              project={project}
-              stage={stage}
-              busy={busy}
-              onOutlineRefresh={() => {
-                void refresh();
-                restartPolling();
-              }}
-              onGenerate={(force) =>
-                void runAction(
-                  () => generateStage(project.id, force ? { force: true } : {}),
-                  undefined,
-                )
-              }
-              onConfirm={() => handleConfirm()}
-              onRollback={(target) =>
-                void runAction(
-                  () => rollbackStage(project.id, target),
-                  `已回退到「${STAGE_LABELS[target]}」，其后阶段产物标记为失效`,
-                )
-              }
-            />
-          </div>
         </div>
       </div>
     </div>

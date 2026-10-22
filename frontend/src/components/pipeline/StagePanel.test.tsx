@@ -173,7 +173,7 @@ describe('StagePanel 状态分流', () => {
     expect(screen.getByText(/该阶段暂未开放/)).toBeInTheDocument();
   });
 
-  it('人物阶段完成渲染人物卡与关系表', () => {
+  it('人物阶段完成只渲染人物卡，关系网留给关系阶段', () => {
     const project = makeProject({
       currentStage: 'characters',
       premise: makePremiseRow({ status: 'done' }),
@@ -194,8 +194,33 @@ describe('StagePanel 状态分流', () => {
         onRollback={noop}
       />,
     );
-    expect(screen.getAllByText('沈青偃').length).toBe(2); // 人物卡 + 关系表
-    expect(screen.getAllByText('裴烈').length).toBe(2);
+    expect(screen.getByText('沈青偃')).toBeInTheDocument();
+    expect(screen.getByText('裴烈')).toBeInTheDocument();
+    expect(screen.queryByText('关系网')).not.toBeInTheDocument();
+  });
+
+  it('关系阶段完成渲染关系表与阶段操作', () => {
+    const project = makeProject({
+      currentStage: 'relations',
+      premise: makePremiseRow({ status: 'done' }),
+      characters: [
+        makeCharacterRow('沈青偃', 'protagonist'),
+        makeCharacterRow('裴烈', 'supporting'),
+      ],
+      relations: [makeRelationRow('char_沈青偃', 'char_裴烈')],
+    });
+    render(
+      <StagePanel
+        project={project}
+        stage="relations"
+        busy={false}
+        onGenerate={noop}
+        onConfirm={noop}
+        onRollback={noop}
+      />,
+    );
     expect(screen.getByText('关系网')).toBeInTheDocument();
+    expect(screen.getByText('裴烈')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认并推进' })).toBeInTheDocument();
   });
 });

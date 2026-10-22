@@ -58,6 +58,7 @@ export function upstreamRequires(stage: Stage, projectStages: Stage[]): Stage[] 
   if (stage === 'characters') {
     return projectStages.includes('world') ? ['premise', 'world'] : ['premise'];
   }
+  if (stage === 'relations') return ['characters'];
   return [];
 }
 
@@ -103,8 +104,17 @@ export function isPollingSettled(project: ProjectDetail): boolean {
   return true;
 }
 
-/** 本 change 范围内的阶段：种子 → 世界观 → 人物（按类型的阶段列表过滤，跳过的阶段不出现） */
-export const IN_SCOPE_STAGES: Stage[] = ['premise', 'world', 'characters', 'outline'];
+/**
+ * 本 change 范围内的阶段：种子 → 世界观 → 人物 → 关系 → 大纲
+ * （按类型的阶段列表过滤，跳过的阶段不出现）
+ */
+export const IN_SCOPE_STAGES: Stage[] = [
+  'premise',
+  'world',
+  'characters',
+  'relations',
+  'outline',
+];
 
 export function timelineStages(projectStages: Stage[]): Stage[] {
   return IN_SCOPE_STAGES.filter((stage) => projectStages.includes(stage));

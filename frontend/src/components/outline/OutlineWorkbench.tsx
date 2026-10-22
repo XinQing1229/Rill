@@ -1,3 +1,4 @@
+import { CloseOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import {
   Alert,
@@ -308,7 +309,22 @@ export function OutlineWorkbench({
           items={[
             {
               key: 'plan',
-              label: '全书规划（直接编辑后保存）',
+              label: (
+                <span className="panel-head">
+                  <span className="panel-title">全书规划</span>
+                  <span
+                    className={
+                      detail.planConfirmedRevision === detail.planRevision
+                        ? 'panel-tag done'
+                        : 'panel-tag pending'
+                    }
+                  >
+                    {detail.planConfirmedRevision === detail.planRevision ? '已确认' : '待确认'}
+                  </span>
+                  {dirtyPlan && <span className="panel-tag dirty">有未保存修改</span>}
+                  <span className="panel-hint">展开可直接编辑并保存</span>
+                </span>
+              ),
               children: (
                 <Form
                   form={planForm}
@@ -329,43 +345,58 @@ export function OutlineWorkbench({
                   ))}
                   <Form.List name="turningPoints">
                     {(fields, { add, remove }) => (
-                      <>
-                        {fields.map((field) => (
-                          <Space key={field.key} align="start">
-                            <Form.Item
-                              name={field.name}
-                              label={`主要转折 ${field.name + 1}`}
-                              rules={[{ required: true }]}
-                            >
-                              <Input.TextArea />
-                            </Form.Item>
-                            <Button onClick={() => remove(field.name)}>移除转折</Button>
-                          </Space>
-                        ))}
+                      <div className="turn-card">
+                        <div className="turn-card-head">
+                          <span>主要转折</span>
+                          <span className="panel-hint">按故事推进顺序列出</span>
+                        </div>
+                        <div className="turn-grid">
+                          {fields.map((field) => (
+                            <div key={field.key} className="turn-cell">
+                              <Form.Item
+                                name={field.name}
+                                label={`转折 ${field.name + 1}`}
+                                rules={[{ required: true }]}
+                              >
+                                <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} />
+                              </Form.Item>
+                              <Button
+                                className="turn-remove"
+                                type="text"
+                                size="small"
+                                aria-label={`移除转折 ${field.name + 1}`}
+                                icon={<CloseOutlined />}
+                                onClick={() => remove(field.name)}
+                              />
+                            </div>
+                          ))}
+                        </div>
                         <Button onClick={() => add('')}>增加转折</Button>
-                      </>
+                      </div>
                     )}
                   </Form.List>
                   <Form.List name="characterArcs">
                     {(fields, { add, remove }) => (
                       <>
                         {fields.map((field) => (
-                          <div key={field.key}>
-                            <Form.Item
-                              name={[field.name, 'characterId']}
-                              label="人物弧光：人物"
-                              rules={[{ required: true }]}
-                            >
-                              <Select options={options} />
-                            </Form.Item>
+                          <div key={field.key} className="arc-card">
+                            <div className="arc-head">
+                              <Form.Item
+                                name={[field.name, 'characterId']}
+                                label="人物弧光：人物"
+                                rules={[{ required: true }]}
+                              >
+                                <Select options={options} style={{ minWidth: 220 }} />
+                              </Form.Item>
+                              <Button onClick={() => remove(field.name)}>移除人物弧光</Button>
+                            </div>
                             <Form.Item
                               name={[field.name, 'development']}
                               label="人物发展"
                               rules={[{ required: true }]}
                             >
-                              <Input.TextArea />
+                              <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} />
                             </Form.Item>
-                            <Button onClick={() => remove(field.name)}>移除人物弧光</Button>
                           </div>
                         ))}
                         <Button onClick={() => add({})}>增加人物弧光</Button>
@@ -399,46 +430,51 @@ export function OutlineWorkbench({
                     {(fields, { add, remove }) => (
                       <>
                         {fields.map((field) => (
-                          <fieldset
-                            key={field.key}
-                            style={{
-                              border: '1px solid var(--line)',
-                              padding: 16,
-                              margin: '16px 0',
-                            }}
-                          >
+                          <fieldset key={field.key} className="seg-card">
                             <legend>剧情段 {field.name + 1}</legend>
-                            {(['id', 'title', 'goal', 'events', 'outcome'] as const).map(
-                              (name, index) => (
-                                <Form.Item
-                                  key={name}
-                                  name={[field.name, name]}
-                                  label={
-                                    ['剧情段标识', '标题', '故事目标', '核心事件', '结果'][index]
-                                  }
-                                  rules={[{ required: true }]}
-                                >
-                                  <Input.TextArea autoSize />
-                                </Form.Item>
-                              ),
-                            )}
-                            <Space>
+                            <div className="seg-row">
+                              <Form.Item
+                                name={[field.name, 'id']}
+                                label="剧情段标识"
+                                rules={[{ required: true }]}
+                              >
+                                <Input />
+                              </Form.Item>
+                              <Form.Item
+                                name={[field.name, 'title']}
+                                label="标题"
+                                rules={[{ required: true }]}
+                              >
+                                <Input />
+                              </Form.Item>
+                            </div>
+                            {(['goal', 'events', 'outcome'] as const).map((name, index) => (
+                              <Form.Item
+                                key={name}
+                                name={[field.name, name]}
+                                label={['故事目标', '核心事件', '结果'][index]}
+                                rules={[{ required: true }]}
+                              >
+                                <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} />
+                              </Form.Item>
+                            ))}
+                            <div className="seg-foot">
                               <Form.Item
                                 name={[field.name, 'startChapter']}
                                 label="起始章"
                                 rules={[{ required: true }]}
                               >
-                                <InputNumber min={1} precision={0} />
+                                <InputNumber min={1} precision={0} style={{ width: 120 }} />
                               </Form.Item>
                               <Form.Item
                                 name={[field.name, 'endChapter']}
                                 label="结束章"
                                 rules={[{ required: true }]}
                               >
-                                <InputNumber min={1} precision={0} />
+                                <InputNumber min={1} precision={0} style={{ width: 120 }} />
                               </Form.Item>
-                            </Space>
-                            <Button onClick={() => remove(field.name)}>移除剧情段</Button>
+                              <Button onClick={() => remove(field.name)}>移除剧情段</Button>
+                            </div>
                           </fieldset>
                         ))}
                         <Button onClick={() => add({})}>增加剧情段</Button>
@@ -474,91 +510,117 @@ export function OutlineWorkbench({
         />
       )}
       {detail.chapters.length > 0 && (
-        <>
-          <h3>每章概要</h3>
-          <Select
-            aria-label="选择编辑章节"
-            options={selectable}
-            value={selected}
-            showSearch
-            optionFilterProp="label"
-            style={{ width: '100%', marginBottom: 16 }}
-            disabled={dirtyChapter}
-            onChange={(number) => {
-              setSelected(number);
-              const chapter = detail.chapters.find((c) => c.number === number);
-              chapterForm.resetFields();
-              if (chapter) chapterForm.setFieldsValue(chapter);
-            }}
-          />
-          {selected !== null && (
-            <Form
-              form={chapterForm}
-              layout="vertical"
-              disabled={readonly || detail.stale}
-              onValuesChange={() => setDirtyChapter(true)}
-            >
-              {Object.entries(chapterLabels).map(([name, label]) => (
-                <Form.Item
-                  key={name}
-                  name={name}
-                  label={label}
-                  rules={
-                    ['foreshadowing', 'relationChange'].includes(name)
-                      ? []
-                      : [{ required: true, whitespace: true }]
-                  }
-                >
-                  <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} />
-                </Form.Item>
-              ))}
-              <Form.Item name="characterIds" label="参与人物" rules={[{ required: true }]}>
-                <Select mode="multiple" options={options} />
-              </Form.Item>
-              <Button
-                type="primary"
-                disabled={readonly || !dirtyChapter || dirtyPlan || detail.stale}
-                onClick={() => {
-                  const original = detail.chapters.find((c) => c.number === selected)!;
-                  const chapter = validate(
-                    ChapterSummarySchema.safeParse({
-                      ...original,
-                      ...chapterForm.getFieldsValue(true),
-                    }),
-                  );
-                  if (chapter)
-                    void act(
-                      () => saveOutlineChapter(project.id, detail.revision, chapter),
-                      '章纲已保存，完整大纲等待确认',
-                    );
-                }}
-              >
-                保存本章概要
-              </Button>
-            </Form>
-          )}
-          <Collapse
-            style={{ marginTop: 16 }}
-            items={detail.plan?.segments.map((segment) => ({
-              key: segment.id,
-              label: `${segment.title} · 第 ${segment.startChapter}–${segment.endChapter} 章`,
-              children: detail.chapters
-                .filter((c) => c.segmentId === segment.id)
-                .map((chapter) => (
-                  <article key={chapter.number}>
-                    <h4>
-                      {chapter.number}. {chapter.title}
-                    </h4>
-                    <p>{chapter.events}</p>
-                    <p>
-                      冲突：{chapter.conflict}；结果：{chapter.outcome}
-                    </p>
-                    <p>后续：{chapter.consequence}</p>
-                  </article>
-                )),
-            }))}
-          />
-        </>
+        <Collapse
+          defaultActiveKey={['chapters']}
+          items={[
+            {
+              key: 'chapters',
+              label: (
+                <span className="panel-head">
+                  <span className="panel-title">每章概要</span>
+                  <span
+                    className={
+                      detail.completedChapters === detail.targetChapters
+                        ? 'panel-tag done'
+                        : 'panel-tag'
+                    }
+                  >
+                    {detail.completedChapters} / {detail.targetChapters} 章
+                  </span>
+                  {detail.stale && <span className="panel-tag dirty">已失效</span>}
+                  {dirtyChapter && <span className="panel-tag dirty">有未保存修改</span>}
+                  <span className="panel-hint">展开选择章节编辑</span>
+                </span>
+              ),
+              children: (
+                <>
+                  <Select
+                    aria-label="选择编辑章节"
+                    options={selectable}
+                    value={selected}
+                    showSearch
+                    optionFilterProp="label"
+                    style={{ width: '100%', marginBottom: 16 }}
+                    disabled={dirtyChapter}
+                    onChange={(number) => {
+                      setSelected(number);
+                      const chapter = detail.chapters.find((c) => c.number === number);
+                      chapterForm.resetFields();
+                      if (chapter) chapterForm.setFieldsValue(chapter);
+                    }}
+                  />
+                  {selected !== null && (
+                    <Form
+                      form={chapterForm}
+                      layout="vertical"
+                      disabled={readonly || detail.stale}
+                      onValuesChange={() => setDirtyChapter(true)}
+                    >
+                      {Object.entries(chapterLabels).map(([name, label]) => (
+                        <Form.Item
+                          key={name}
+                          name={name}
+                          label={label}
+                          rules={
+                            ['foreshadowing', 'relationChange'].includes(name)
+                              ? []
+                              : [{ required: true, whitespace: true }]
+                          }
+                        >
+                          <Input.TextArea autoSize={{ minRows: 2, maxRows: 8 }} />
+                        </Form.Item>
+                      ))}
+                      <Form.Item name="characterIds" label="参与人物" rules={[{ required: true }]}>
+                        <Select mode="multiple" options={options} />
+                      </Form.Item>
+                      <Button
+                        type="primary"
+                        disabled={readonly || !dirtyChapter || dirtyPlan || detail.stale}
+                        onClick={() => {
+                          const original = detail.chapters.find((c) => c.number === selected)!;
+                          const chapter = validate(
+                            ChapterSummarySchema.safeParse({
+                              ...original,
+                              ...chapterForm.getFieldsValue(true),
+                            }),
+                          );
+                          if (chapter)
+                            void act(
+                              () => saveOutlineChapter(project.id, detail.revision, chapter),
+                              '章纲已保存，完整大纲等待确认',
+                            );
+                        }}
+                      >
+                        保存本章概要
+                      </Button>
+                    </Form>
+                  )}
+                  <Collapse
+                    style={{ marginTop: 16 }}
+                    items={detail.plan?.segments.map((segment) => ({
+                      key: segment.id,
+                      label: `${segment.title} · 第 ${segment.startChapter}–${segment.endChapter} 章`,
+                      children: detail.chapters
+                        .filter((c) => c.segmentId === segment.id)
+                        .map((chapter) => (
+                          <article key={chapter.number}>
+                            <h4>
+                              {chapter.number}. {chapter.title}
+                            </h4>
+                            <p>{chapter.events}</p>
+                            <p>
+                              冲突：{chapter.conflict}；结果：{chapter.outcome}
+                            </p>
+                            <p>后续：{chapter.consequence}</p>
+                          </article>
+                        )),
+                    }))}
+                  />
+                </>
+              ),
+            },
+          ]}
+        />
       )}
       {detail.staleChapters.length > 0 && (
         <Collapse

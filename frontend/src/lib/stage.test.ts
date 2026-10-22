@@ -79,6 +79,12 @@ describe('upstreamRequires（与后端生成器 requires() 一致）', () => {
   it('跳过世界观的类型人物只依赖种子', () => {
     expect(upstreamRequires('characters', ['premise', 'characters'])).toEqual(['premise']);
   });
+
+  it('关系依赖人物（与后端 RelationGenerator.requires 一致）', () => {
+    expect(upstreamRequires('relations', ['premise', 'characters', 'relations'])).toEqual([
+      'characters',
+    ]);
+  });
 });
 
 describe('firstUnreadyUpstream', () => {
@@ -140,10 +146,11 @@ describe('isPollingSettled', () => {
 });
 
 describe('timelineStages', () => {
-  it('跳过世界观的类型不出现在时间轴', () => {
+  it('跳过世界观的类型不出现在时间轴，关系阶段保留', () => {
     expect(timelineStages(['premise', 'characters', 'relations'])).toEqual([
       'premise',
       'characters',
+      'relations',
     ]);
   });
 });
