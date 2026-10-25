@@ -1,5 +1,29 @@
+import { ProseRevisionService } from './prose/prose-revision.service.js';
+import {
+  CreateProseRevisionBodySchema,
+  ApplyProseRevisionBodySchema,
+  type CreateProseRevisionBody,
+  type ApplyProseRevisionBody,
+} from '@rill/shared';
+import { PremiseRevisionService } from './premise/premise-revision.service.js';
+import {
+  PreviewPremiseBodySchema,
+  AdoptPremiseBodySchema,
+  type PreviewPremiseBody,
+  type AdoptPremiseBody,
+} from '@rill/shared';
+import { ProseService } from './prose/prose.service.js';
+import {
+  ConfirmProseBodySchema,
+  ProseChapterParamSchema,
+  OverrideProseReviewBodySchema,
+  type ConfirmProseBody,
+  type OverrideProseReviewBody,
+} from '@rill/shared';
 import {
   BadRequestException,
+  GoneException,
+  HttpCode,
   Body,
   Controller,
   Delete,
@@ -39,7 +63,26 @@ export class NovelController {
     private readonly pipeline: PipelineService,
     private readonly questionnaire: QuestionnaireService,
     private readonly outline: OutlineService,
+    private readonly prose: ProseService,
+    private readonly proseRevision: ProseRevisionService,
+    private readonly premiseRevision: PremiseRevisionService,
   ) {}
+
+  @Post('projects/:id/premise/preview')
+  previewPremise(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(PreviewPremiseBodySchema)) body: PreviewPremiseBody,
+  ) {
+    return this.premiseRevision.preview(id, body);
+  }
+
+  @Post('projects/:id/premise/adopt')
+  adoptPremise(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(AdoptPremiseBodySchema)) body: AdoptPremiseBody,
+  ) {
+    return this.premiseRevision.adopt(id, body.candidateId);
+  }
 
   /** 获取问卷结构（随类型级联） */
   @Get('questionnaire')
@@ -174,6 +217,103 @@ export class NovelController {
     body: { expectedRevision: number; chapter: ChapterSummary },
   ) {
     return this.outline.saveChapter(id, body.expectedRevision, Number(number), body.chapter);
+  }
+
+  @Get('projects/:id/prose')
+  getProse(@Param('id') id: string) {
+    return this.prose.detail(id);
+  }
+
+  @Get('projects/:id/prose/chapters/:number')
+  async getProseChapter(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+  ) {
+    const chapter = (await this.prose.detail(id)).chapters.find(
+      (c) => c.chapterNumber === Number(number),
+    );
+    if (!chapter) throw new NotFoundException('章节不存在');
+    return chapter;
+  }
+
+  @Post('projects/:id/prose/chapters/:number/retry')
+  retryProse(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+  ) {
+    return this.pipeline.proseAction(id, (prose) => prose.process(id, Number(number)));
+  }
+
+  @Post('projects/:id/prose/chapters/:number/regenerate')
+  regenerateProse(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+  ) {
+    void id;
+    void number;
+    throw new GoneException('候选稿功能已下线，请使用按建议修改');
+  }
+
+  @Post('projects/:id/prose/chapters/:number/restore')
+  restoreProse(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+  ) {
+    return this.proseRevision.restore(id, Number(number));
+  }
+
+  @Post('projects/:id/prose/chapters/:number/revisions')
+  @HttpCode(202)
+  createProseRevision(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+    @Body(new ZodValidationPipe(CreateProseRevisionBodySchema)) body: CreateProseRevisionBody,
+  ) {
+    return this.proseRevision.create(id, Number(number), body);
+  }
+  @Get('projects/:id/prose/chapters/:number/revisions/:revisionId')
+  getProseRevision(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+    @Param('revisionId') revisionId: string,
+  ) {
+    return this.proseRevision.get(id, Number(number), revisionId);
+  }
+  @Post('projects/:id/prose/chapters/:number/revisions/:revisionId/apply')
+  @HttpCode(202)
+  applyProseRevision(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+    @Param('revisionId') revisionId: string,
+    @Body(new ZodValidationPipe(ApplyProseRevisionBodySchema)) body: ApplyProseRevisionBody,
+  ) {
+    return this.proseRevision.apply(id, Number(number), revisionId, body);
+  }
+  @Post('projects/:id/prose/chapters/:number/revisions/:revisionId/discard')
+  discardProseRevision(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+    @Param('revisionId') revisionId: string,
+  ) {
+    return this.proseRevision.discard(id, Number(number), revisionId);
+  }
+
+  @Post('projects/:id/prose/chapters/:number/confirm')
+  acceptProse(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+    @Body(new ZodValidationPipe(ConfirmProseBodySchema)) body: ConfirmProseBody,
+  ) {
+    return this.pipeline.proseAction(id, (prose) => prose.accept(id, Number(number), body), true);
+  }
+
+  @Post('projects/:id/prose/chapters/:number/override')
+  overrideProse(
+    @Param('id') id: string,
+    @Param('number', new ZodValidationPipe(ProseChapterParamSchema)) number: number,
+    @Body(new ZodValidationPipe(OverrideProseReviewBodySchema)) body: OverrideProseReviewBody,
+  ) {
+    return this.pipeline.proseAction(id, (prose) => prose.override(id, Number(number), body));
   }
 
   @Post('projects/:id/mode')

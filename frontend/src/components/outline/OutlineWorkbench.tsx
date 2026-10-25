@@ -44,7 +44,7 @@ const chapterLabels = {
   relationChange: '关系变化（可选）',
 } as const;
 
-/** 只挂载正在编辑的单章表单，长篇其余章节按剧情段回看。 */
+/** 只挂载正在编辑的单章表单，其余章节按剧情段回看。 */
 export function OutlineWorkbench({
   project,
   onChanged,
@@ -127,7 +127,7 @@ export function OutlineWorkbench({
     if (detail && (detail.completedChapters > 0 || detail.staleChapters.length > 0))
       modal.confirm({
         title: '修改规划将使章纲与下游失效',
-        content: '已有章纲可回看，但需重新生成；细纲和正文也将失效。继续保存？',
+        content: '已有章纲可回看，但需重新生成；正文也将失效。继续保存？',
         onOk: action,
       });
     else action();
@@ -677,7 +677,7 @@ export function OutlineWorkbench({
               )
             }
           >
-            {detail.step === 'confirmed' ? '沿用已确认大纲并进入细纲' : '确认完整大纲并进入细纲'}
+            {detail.step === 'confirmed' ? '沿用已确认大纲并进入正文' : '确认完整大纲并进入正文'}
           </Button>
         )}
       </Space>

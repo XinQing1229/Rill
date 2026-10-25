@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+
 import { StagePanel } from './StagePanel';
 import {
   makeCharacterRow,
@@ -156,21 +157,6 @@ describe('StagePanel 状态分流', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: '确认并推进' })).not.toBeInTheDocument();
-  });
-
-  it('未实现阶段显示预告', () => {
-    const project = makeProject();
-    render(
-      <StagePanel
-        project={project}
-        stage="beats"
-        busy={false}
-        onGenerate={noop}
-        onConfirm={noop}
-        onRollback={noop}
-      />,
-    );
-    expect(screen.getByText(/该阶段暂未开放/)).toBeInTheDocument();
   });
 
   it('人物阶段完成只渲染人物卡，关系网留给关系阶段', () => {

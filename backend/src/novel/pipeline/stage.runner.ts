@@ -1,3 +1,4 @@
+import type { Prisma } from '../../../generated/prisma/client.js';
 import { storageFor } from './stage-storage.js';
 import { commitGeneration, executionContext } from './execution-context.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -84,7 +85,7 @@ export function createStageRunner(deps: StageRunnerDeps): StageRunner {
         world: true,
         characters: true,
         relations: true,
-        stageRuns: { orderBy: { updatedAt: 'desc' } },
+        stageRuns: { orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }] },
       },
     });
     if (!project) throw new NotFoundException(`项目不存在: ${state.projectId}`);
@@ -98,18 +99,14 @@ export function createStageRunner(deps: StageRunnerDeps): StageRunner {
       await tx.project.update({ where: { id: state.projectId }, data: { currentStage: stage } });
     });
 
-    const generator = deps.artifacts.getGenerator(stage);
-    if (!generator) {
-      const message = `阶段 ${stage} 的生成能力尚未实现（留给后续 change）`;
-      await setStageStatus(deps.prisma, state.projectId, stage, 'failed', message);
-      throw new BadRequestException(message);
-    }
-
     await markDownstreamStale(deps.artifacts, state.projectId, stage, state.answers.genre);
     await setStageStatus(deps.prisma, state.projectId, stage, 'generating');
 
     try {
       const context = await deps.assembler.assemble(state.projectId, stage);
+      const generator = deps.artifacts.getGenerator(stage);
+      if (!generator)
+        throw new BadRequestException(`阶段 ${stage} 的生成能力尚未实现（留给后续 change）`);
       await generator.generate(context, state.answers, state.projectId);
       await setStageStatus(deps.prisma, state.projectId, stage, 'done');
       return { currentStage: stage };
@@ -119,4 +116,21 @@ export function createStageRunner(deps: StageRunnerDeps): StageRunner {
       throw error;
     }
   };
+}
+
+/** 采用上游候选时，所有下游状态与正式产物在同一事务失效。 */
+export async function invalidateDownstreamInTransaction(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  stage: Stage,
+  genre: QuestionnaireAnswers['genre'],
+): Promise<void> {
+  const stages = stagesFor(genre);
+  for (const downstream of stages.slice(stages.indexOf(stage) + 1)) {
+    await tx.stageRun.updateMany({
+      where: { projectId, stage: downstream },
+      data: { stale: true, confirmedAt: null },
+    });
+    await storageFor(downstream)?.invalidate(tx, projectId, true);
+  }
 }

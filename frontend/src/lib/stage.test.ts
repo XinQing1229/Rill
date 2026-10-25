@@ -65,6 +65,14 @@ describe('readStageState（与后端 UpstreamAssembler 同口径）', () => {
 });
 
 describe('upstreamRequires（与后端生成器 requires() 一致）', () => {
+  it('正文直接依赖大纲，时间轴中大纲后直接是正文', () => {
+    expect(upstreamRequires('prose', ['premise', 'outline', 'prose'])).toEqual(['outline']);
+    expect(timelineStages(['premise', 'outline', 'prose'])).toEqual([
+      'premise',
+      'outline',
+      'prose',
+    ]);
+  });
   it('世界观依赖种子', () => {
     expect(upstreamRequires('world', ['premise', 'world'])).toEqual(['premise']);
   });

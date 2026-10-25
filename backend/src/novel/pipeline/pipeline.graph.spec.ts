@@ -14,7 +14,7 @@ import {
 } from './pipeline.graph.js';
 
 function makeAnswers(overrides: Partial<QuestionnaireAnswers> = {}): QuestionnaireAnswers {
-  return { genre: 'xuanhuan', length: 'medium', tone: '热血', pov: '第三人称限知', ...overrides };
+  return { genre: 'xuanhuan', length: 'short', tone: '热血', pov: '第三人称限知', ...overrides };
 }
 
 function makeState(overrides: Partial<PipelineState> = {}): PipelineState {
@@ -128,7 +128,7 @@ describe('routeEntry', () => {
   });
 
   it('currentStage 不在编排列表时回退到首个阶段', () => {
-    expect(routeEntry(makeState({ currentStage: 'beats' }), stages)).toBe('premise');
+    expect(routeEntry(makeState({ currentStage: 'prose' }), stages)).toBe('premise');
   });
 
   it('编排列表为空时结束', () => {
@@ -196,13 +196,13 @@ describe('compilePipelineGraph 的推进模式', () => {
 });
 
 describe('未实现阶段的占位节点', () => {
-  it('为 outline/beats/prose 注册占位节点', () => {
+  it('为 outline/prose 注册占位节点', () => {
     const graph = buildPipelineGraph({
-      stages: ['premise', 'world', 'characters', 'relations', 'outline', 'beats', 'prose'],
+      stages: ['premise', 'world', 'characters', 'relations', 'outline', 'prose'],
       runner: async () => ({}),
     });
 
-    expect(Object.keys(graph.nodes)).toEqual(expect.arrayContaining(['outline', 'beats', 'prose']));
+    expect(Object.keys(graph.nodes)).toEqual(expect.arrayContaining(['outline', 'prose']));
   });
 
   it('执行到未实现阶段时抛出尚未实现而非崩溃', async () => {

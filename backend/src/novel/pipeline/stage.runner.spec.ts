@@ -11,7 +11,7 @@ import { PipelineState } from './pipeline.graph.js';
 
 const ANSWERS: QuestionnaireAnswers = {
   genre: 'xuanhuan',
-  length: 'medium',
+  length: 'short',
   tone: '热血',
   pov: '第三人称限知',
 };

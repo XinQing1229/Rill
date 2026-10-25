@@ -42,42 +42,48 @@ export const GENRES = [
 ] as const;
 export type Genre = (typeof GENRES)[number];
 
-export const LENGTHS = ['short', 'medium', 'long'] as const;
+export const LENGTHS = ['short'] as const;
 export type StoryLength = (typeof LENGTHS)[number];
-
 export const TONES = ['轻松', '热血', '治愈', '暗黑', '紧张', '厚重'] as const;
 export const POVS = ['第一人称', '第三人称限知', '第三人称全知'] as const;
 
 export const PIPELINE_MODES = ['manual', 'auto'] as const;
 export type PipelineMode = (typeof PIPELINE_MODES)[number];
 
-export const STAGES = [
-  'premise',
-  'world',
-  'characters',
-  'relations',
-  'outline',
-  'beats',
-  'prose',
-] as const;
+export const STAGES = ['premise', 'world', 'characters', 'relations', 'outline', 'prose'] as const;
 export type Stage = (typeof STAGES)[number];
 
 export const ARTIFACT_STATUS = ['pending', 'generating', 'done', 'failed'] as const;
 export type ArtifactStatus = (typeof ARTIFACT_STATUS)[number];
 
-export const QUESTIONNAIRE_VERSION = 'v1';
+export const QUESTIONNAIRE_VERSION = 'v3';
 
-/** 问卷答案（必答 4 项 + 选答 + 类型级联项） */
+export const WRITING_STYLES = ['short-satisfying'] as const;
+export const WRITING_STYLE_LABELS = { 'short-satisfying': '短篇爽文' } as const;
+export const WritingStyleSelectionSchema = z
+  .object({
+    id: z.literal('short-satisfying'),
+    version: z.literal('v1'),
+  })
+  .strict();
+export type WritingStyleSelection = z.infer<typeof WritingStyleSelectionSchema>;
+export const DEFAULT_WRITING_STYLE: WritingStyleSelection = {
+  id: 'short-satisfying',
+  version: 'v1',
+};
+
+/** 问卷答案（必答 3 项 + 选答 + 类型级联项） */
 export interface QuestionnaireAnswers {
   /** 必答 */
   genre: Genre;
   /** 必答 */
   length: StoryLength;
-  /** 必答 */
-  tone: string;
+  /** 仅用于读取历史项目的阅读体验 */
+  tone?: string;
   /** 必答 */
   pov: string;
   /** 选答（默认"不指定"） */
+  writingStyle?: WritingStyleSelection;
   pacing?: string;
   ending?: string;
   romance?: string;
@@ -89,14 +95,15 @@ export interface QuestionnaireAnswers {
   extras?: Record<string, string>;
 }
 
-export const REQUIRED_ANSWER_FIELDS = ['genre', 'length', 'tone', 'pov'] as const;
+export const REQUIRED_ANSWER_FIELDS = ['genre', 'length', 'pov'] as const;
 
 /** 问卷答案的结构校验（genre/length 为结构性枚举，必须精确匹配） */
 export const QuestionnaireAnswersSchema = z.object({
   genre: z.enum(GENRES),
   length: z.enum(LENGTHS),
-  tone: z.string().min(1, '基调不能为空'),
+  tone: z.string().optional(),
   pov: z.string().min(1, '叙事视角不能为空'),
+  writingStyle: WritingStyleSelectionSchema.optional(),
   pacing: z.string().optional(),
   ending: z.string().optional(),
   romance: z.string().optional(),
@@ -106,10 +113,32 @@ export const QuestionnaireAnswersSchema = z.object({
   extras: z.record(z.string(), z.string()).optional(),
 });
 
+/** 标题来源：旧项目默认视为作者命名，禁止凭展示文本猜测来源。 */
+export const ProjectTitleSourceSchema = z.enum(['author', 'placeholder', 'generated']);
+export type ProjectTitleSource = z.infer<typeof ProjectTitleSourceSchema>;
+export const STORY_IDEA_MAX_LENGTH = 2000;
+const optionalText = (max: number, message: string) =>
+  z
+    .string()
+    .trim()
+    .max(max, message)
+    .optional()
+    .transform((value) => value || undefined);
+
+/** 新建输入与历史读取分开：旧答案不受新输入长度上限影响。 */
+export const CreateQuestionnaireAnswersSchema = QuestionnaireAnswersSchema.extend({
+  idea: optionalText(STORY_IDEA_MAX_LENGTH, '故事想法最多 2000 字符'),
+}).transform(({ tone: _tone, extras, ...answers }) => {
+  const normalized = { ...extras };
+  delete normalized.profession;
+  delete normalized.relation;
+  return { ...answers, extras: Object.keys(normalized).length ? normalized : undefined };
+});
+
 /** POST /api/novel/projects 请求体 */
 export const CreateProjectSchema = z.object({
-  title: z.string().min(1, '标题不能为空').max(100, '标题过长'),
-  answers: QuestionnaireAnswersSchema,
+  title: optionalText(100, '书名最多 100 字符'),
+  answers: CreateQuestionnaireAnswersSchema,
   mode: z.enum(PIPELINE_MODES).optional(),
 });
 
@@ -149,7 +178,7 @@ export const ProjectScopeSchema = z.enum(PROJECT_SCOPES).optional();
 
 /**
  * 种子（Premise）产物 schema。
- * 注意：**不含**类型、篇幅、基调、叙事视角——这些由问卷直接决定，不交给模型生成，
+ * 注意：**不含**类型、篇幅、叙事视角——这些由问卷直接决定，不交给模型生成，
  * 以避免模型输出与作者选择冲突。
  */
 export const StoryEngineSchema = z.object({
@@ -198,6 +227,97 @@ export const PremiseReadSchema = PremiseSchema.extend({
 });
 export type Premise = z.infer<typeof PremiseReadSchema>;
 export type GeneratedPremise = z.infer<typeof PremiseSchema>;
+
+/** 种子建议修改：候选只在显式采用后成为正式内容。 */
+export const PreviewPremiseBodySchema = z.object({
+  requestId: z.uuid(),
+  feedback: z.string().trim().min(1, '请填写修改建议').max(2000, '修改建议不能超过 2000 字'),
+});
+export const AdoptPremiseBodySchema = z.object({ candidateId: z.string().min(1) });
+/** 固定比对单元：按故事概要、发动机、主角、背景、避雷排列。 */
+export const PREMISE_CHANGE_PATHS = [
+  'title',
+  'logline',
+  'theme',
+  'coreConflict',
+  'hook',
+  'storyEngine.openingGoal',
+  'storyEngine.mainObstacle',
+  'storyEngine.failureCost',
+  'storyEngine.escalationPath',
+  'protagonist.name',
+  'protagonist.identity',
+  'protagonist.desire',
+  'protagonist.flaw',
+  'setting.era',
+  'setting.place',
+  'setting.socialBackground',
+  'taboos',
+] as const;
+export const PremiseChangePathSchema = z.enum(PREMISE_CHANGE_PATHS);
+export type PremiseChangePath = z.infer<typeof PremiseChangePathSchema>;
+export const PremiseChangeNoteSchema = z.object({
+  path: PremiseChangePathSchema,
+  description: z.string().trim().min(1).max(120),
+});
+export const RevisedPremiseOutputSchema = z.object({
+  premise: PremiseSchema,
+  changeNotes: z.array(PremiseChangeNoteSchema).max(17).default([]),
+});
+export type RevisedPremiseOutput = z.infer<typeof RevisedPremiseOutputSchema>;
+const PremiseChangeValueSchema = z.union([z.string(), z.array(z.string()), z.null()]);
+export const PremiseChangeSummarySchema = z
+  .object({
+    version: z.literal(1),
+    changes: z
+      .array(
+        z.object({
+          path: PremiseChangePathSchema,
+          before: PremiseChangeValueSchema,
+          after: PremiseChangeValueSchema,
+          description: z.string().trim().min(1).max(120),
+          descriptionSource: z.enum(['ai', 'fallback']),
+        }),
+      )
+      .max(17),
+  })
+  .superRefine((summary, ctx) => {
+    const seen = new Set<string>();
+    summary.changes.forEach((change, index) => {
+      if (seen.has(change.path) || JSON.stringify(change.before) === JSON.stringify(change.after))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['changes', index],
+          message: '修改项不能重复或包含未变化内容',
+        });
+      seen.add(change.path);
+      const arrayField = change.path === 'taboos' || change.path === 'storyEngine.escalationPath';
+      if (
+        change.after === null ||
+        (arrayField ? !Array.isArray(change.after) : typeof change.after !== 'string') ||
+        (change.before === null
+          ? !change.path.startsWith('storyEngine.')
+          : arrayField
+            ? !Array.isArray(change.before)
+            : typeof change.before !== 'string')
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['changes', index],
+          message: '修改前后值与字段类型不一致',
+        });
+    });
+  });
+export type PremiseChangeSummary = z.infer<typeof PremiseChangeSummarySchema>;
+export const PremisePreviewSchema = z.object({
+  candidateId: z.string().min(1),
+  premise: PremiseSchema,
+  changeSummary: PremiseChangeSummarySchema.nullable().default(null),
+  changeSummaryWarning: z.string().optional(),
+});
+export type PreviewPremiseBody = z.infer<typeof PreviewPremiseBodySchema>;
+export type AdoptPremiseBody = z.infer<typeof AdoptPremiseBodySchema>;
+export type PremisePreview = z.infer<typeof PremisePreviewSchema>;
 
 // ---------------- 世界观与人物 ----------------
 
@@ -373,7 +493,6 @@ export const STAGE_LABELS: Record<Stage, string> = {
   characters: '人物',
   relations: '关系',
   outline: '大纲',
-  beats: '细纲',
   prose: '正文',
 };
 
@@ -391,8 +510,6 @@ export const GENRE_LABELS: Record<Genre, string> = {
 /** 篇幅中文名（展示用） */
 export const LENGTH_LABELS: Record<StoryLength, string> = {
   short: '短篇',
-  medium: '中篇',
-  long: '长篇',
 };
 
 /** 问卷结构（GET /api/novel/questionnaire 响应） */
@@ -401,13 +518,16 @@ export interface QuestionOption {
   label: string;
 }
 
-export interface Question {
+export const QuestionSchema = z.object({
   /** 问卷键：必答项直接取值（如 length），选答带 `extras.` 前缀 */
-  key: string;
-  label: string;
-  required: boolean;
-  options: QuestionOption[];
-}
+  key: z.string(),
+  label: z.string(),
+  required: z.boolean(),
+  options: z.array(z.object({ value: z.string(), label: z.string() })),
+  /** 是否允许作者填写预设选项之外的内容 */
+  allowCustom: z.boolean().optional(),
+});
+export type Question = z.infer<typeof QuestionSchema>;
 
 export interface QuestionnaireDefinition {
   version: string;
@@ -471,6 +591,8 @@ export interface ProjectDetail {
   stageStates?: Partial<Record<Stage, StageExecutionState>>;
   id: string;
   title: string;
+  /** 历史客户端可忽略的书名来源 */
+  titleSource?: ProjectTitleSource;
   genre: Genre;
   length: StoryLength;
   mode: PipelineMode;
@@ -599,3 +721,401 @@ export interface OutlineDetail extends OutlineProgress {
   }>;
   staleChapters: ChapterSummary[];
 }
+
+// ---------------- 正文：文件权威、AI 审核与人工接受 ----------------
+export const PROSE_REVIEW_DIMENSIONS = [
+  'consistency',
+  'character',
+  'pacing',
+  'continuity',
+  'foreshadow',
+  'hook',
+  'aesthetic',
+] as const;
+export const ProseReviewDimensionSchema = z.enum(PROSE_REVIEW_DIMENSIONS);
+export const ProseVerdictSchema = z.enum(['accept', 'polish', 'rewrite']);
+export const ProseSeveritySchema = z.enum(['warning', 'error', 'critical']);
+export const ProseHashSchema = z.string().regex(/^[a-f0-9]{64}$/, '需要 SHA-256 内容哈希');
+const ProseTextSchema = z.string().trim().min(1);
+const ProseRevisionSchema = z.number().int().nonnegative();
+export const ProseChapterNumberSchema = z.number().int().positive().safe();
+export const ProseChapterParamSchema = z
+  .string()
+  .regex(/^\d+$/, '章号必须为正整数')
+  .transform(Number)
+  .pipe(ProseChapterNumberSchema);
+
+/** 跨章证据同时保留来源章号和摘要中的原文，供服务端核验。 */
+const ProseQuoteSchema = z.string().refine((text) => text.trim().length > 0, '引用不能为空白');
+export const ProseIssueSchema = z.object({
+  dimension: ProseReviewDimensionSchema,
+  severity: ProseSeveritySchema,
+  problem: ProseTextSchema,
+  evidence: z.array(ProseQuoteSchema).min(1),
+  location: ProseTextSchema,
+  basis: ProseTextSchema,
+  suggestion: ProseTextSchema,
+  previousEvidence: z
+    .object({
+      chapterNumber: ProseChapterNumberSchema,
+      quotes: z.array(ProseQuoteSchema).min(1),
+    })
+    .optional(),
+});
+export const ProseScoresSchema = z.object({
+  consistency: z.number().int().min(0).max(100),
+  character: z.number().int().min(0).max(100),
+  pacing: z.number().int().min(0).max(100),
+  continuity: z.number().int().min(0).max(100),
+  foreshadow: z.number().int().min(0).max(100),
+  hook: z.number().int().min(0).max(100),
+  aesthetic: z.number().int().min(0).max(100),
+});
+export type ProseIssue = z.infer<typeof ProseIssueSchema>;
+export type ProseVerdict = z.infer<typeof ProseVerdictSchema>;
+
+/** verdict 由严重度决定，评分不作为通过门槛。 */
+export function proseVerdictFor(issues: readonly ProseIssue[]): ProseVerdict {
+  if (issues.some((issue) => issue.severity === 'critical')) return 'rewrite';
+  if (issues.some((issue) => issue.severity === 'error')) return 'polish';
+  return 'accept';
+}
+
+/** 模型输出只描述观察结果，服务端据此派生 verdict。 */
+export const ProseReviewOutputSchema = z.object({
+  scores: ProseScoresSchema,
+  issues: z.array(ProseIssueSchema),
+});
+/** 失败诊断只用于排查，不能作为有效审核报告消费。 */
+export const ProseFailedReviewSchema = z.object({
+  formatVersion: z.literal(1),
+  status: z.literal('failed'),
+  reviewId: ProseTextSchema,
+  chapterNumber: ProseChapterNumberSchema,
+  sourceHash: ProseHashSchema,
+  dependencyFingerprint: ProseHashSchema,
+  promptVersion: ProseTextSchema,
+  failedAt: z.string().datetime(),
+  error: ProseTextSchema,
+  output: z.json(),
+});
+export type ProseFailedReview = z.infer<typeof ProseFailedReviewSchema>;
+export const ProseReviewReportSchema = ProseReviewOutputSchema.extend({
+  id: ProseTextSchema,
+  sourceHash: ProseHashSchema,
+  dependencyFingerprint: ProseHashSchema,
+  promptVersion: ProseTextSchema,
+  coveredChapters: z.array(ProseChapterNumberSchema),
+  verdict: ProseVerdictSchema,
+  overrideReason: ProseTextSchema.nullable(),
+}).refine((report) => report.verdict === proseVerdictFor(report.issues), {
+  message: '审核结论与问题严重度不一致',
+  path: ['verdict'],
+});
+export const ProseSummaryOutputSchema = z.object({
+  events: z.array(ProseTextSchema).min(1),
+  characterChanges: z.array(ProseTextSchema),
+  foreshadowing: z.array(ProseTextSchema),
+  continuity: ProseTextSchema,
+});
+/** 仅约束新摘要生成；历史摘要及 API 读取继续使用 ProseSummaryOutputSchema。 */
+export const PROSE_SUMMARY_GENERATION_LIMITS = {
+  events: { maxItems: 6, maxCharacters: 120 },
+  characterChanges: { maxItems: 5, maxCharacters: 100 },
+  foreshadowing: { maxItems: 5, maxCharacters: 100 },
+} as const;
+export const ProseSummaryGenerationSchema = ProseSummaryOutputSchema.extend({
+  events: z
+    .array(ProseTextSchema.max(PROSE_SUMMARY_GENERATION_LIMITS.events.maxCharacters))
+    .min(1)
+    .max(PROSE_SUMMARY_GENERATION_LIMITS.events.maxItems)
+    .describe('通常3～5条关键事件，每条40～80字；合并同一因果链，保留结果与后续约束'),
+  characterChanges: z
+    .array(ProseTextSchema.max(PROSE_SUMMARY_GENERATION_LIMITS.characterChanges.maxCharacters))
+    .max(PROSE_SUMMARY_GENERATION_LIMITS.characterChanges.maxItems)
+    .describe('通常0～4条，每条30～60字；每人通常一条，只记持续状态变化，无变化返回空数组'),
+  foreshadowing: z
+    .array(ProseTextSchema.max(PROSE_SUMMARY_GENERATION_LIMITS.foreshadowing.maxCharacters))
+    .max(PROSE_SUMMARY_GENERATION_LIMITS.foreshadowing.maxItems)
+    .describe('通常0～4条，每条30～70字；只记新增或推进的未解线索，不推测后续剧情'),
+});
+export const ProsePendingSummarySchema = z.object({
+  id: ProseTextSchema,
+  reviewId: ProseTextSchema,
+  sourceHash: ProseHashSchema,
+  dependencyFingerprint: ProseHashSchema,
+  data: ProseSummaryOutputSchema,
+  accepted: z.boolean(),
+});
+export const ProseVersionBodySchema = z.object({
+  expectedRevision: ProseRevisionSchema,
+  expectedHash: ProseHashSchema,
+});
+export const CreateProseRevisionBodySchema = ProseVersionBodySchema.extend({
+  requestId: z.string().min(1).max(100),
+  feedback: z.string().trim().max(2000).default(''),
+  reviewSelection: z
+    .object({
+      reviewId: z.string().min(1),
+      issueIndexes: z
+        .array(z.number().int().min(0))
+        .min(1)
+        .max(100)
+        .refine((items) => new Set(items).size === items.length, '建议不能重复选择'),
+    })
+    .optional(),
+}).refine((body) => Boolean(body.feedback || body.reviewSelection), '请选择审核建议或填写修改建议');
+export const ApplyProseRevisionBodySchema = ProseVersionBodySchema.extend({
+  requestId: z.string().min(1).max(100),
+});
+export const ProseRevisionOutputSchema = z.discriminatedUnion('outcome', [
+  z.object({
+    outcome: z.literal('revised'),
+    content: z.string().trim().min(1),
+    explanation: z.string(),
+    suggestionResponses: z.array(
+      z.object({
+        issueIndex: z.number().int().nonnegative(),
+        explanation: z.string().min(1),
+      }),
+    ),
+  }),
+  z.object({ outcome: z.literal('blocked'), explanation: z.string().min(1) }),
+]);
+export const ProseRevisionDetailSchema = z.object({
+  id: z.string(),
+  chapterNumber: ProseChapterNumberSchema,
+  status: z.enum([
+    'generating',
+    'ready',
+    'applying',
+    'applied',
+    'blocked',
+    'unchanged',
+    'failed',
+    'discarded',
+    'stale',
+    'conflict',
+    'recovery_required',
+  ]),
+  baseRevision: ProseRevisionSchema,
+  baseHash: ProseHashSchema,
+  feedback: z.string(),
+  reviewId: z.string().nullable(),
+  suggestions: z.array(
+    z.object({ issueIndex: z.number().int(), problem: z.string(), suggestion: z.string() }),
+  ),
+  content: z.string().nullable(),
+  explanation: z.string().nullable(),
+  suggestionResponses: z.array(z.object({ issueIndex: z.number().int(), explanation: z.string() })),
+  changes: z.array(z.object({ before: z.string(), after: z.string() })),
+  error: z.string().nullable(),
+});
+export type CreateProseRevisionBody = z.infer<typeof CreateProseRevisionBodySchema>;
+export type ApplyProseRevisionBody = z.infer<typeof ApplyProseRevisionBodySchema>;
+export type ProseRevision = z.infer<typeof ProseRevisionDetailSchema>;
+export const ConfirmProseBodySchema = ProseVersionBodySchema.extend({
+  reviewId: ProseTextSchema,
+  summaryId: ProseTextSchema,
+});
+export const OverrideProseReviewBodySchema = ProseVersionBodySchema.extend({
+  reviewId: ProseTextSchema,
+  reason: ProseTextSchema,
+});
+export const ProseCandidateSchema = z.object({
+  fileStatus: z.enum(['valid', 'missing', 'unreadable']),
+  error: z.string().nullable(),
+  operationId: ProseTextSchema,
+  path: ProseTextSchema,
+  content: z.string(),
+  sourceHash: ProseHashSchema,
+});
+export const ProseChapterDetailSchema = z.object({
+  chapterNumber: ProseChapterNumberSchema,
+  path: ProseTextSchema,
+  content: z.string().nullable(),
+  revision: ProseRevisionSchema,
+  observedHash: ProseHashSchema.nullable(),
+  confirmedHash: ProseHashSchema.nullable(),
+  generationStatus: z.enum(['pending', 'generating', 'done', 'failed']),
+  reviewStatus: z.enum(['pending', 'confirmed', 'needs_review']),
+  fileStatus: z.enum(['missing', 'valid', 'empty', 'invalid_encoding', 'unreadable']),
+  machineStep: z.enum(['generate', 'ai_review', 'summary', 'human_accept', 'done']),
+  report: ProseReviewReportSchema.nullable(),
+  summary: ProsePendingSummarySchema.nullable(),
+  candidates: z.array(ProseCandidateSchema),
+  activeRevision: ProseRevisionDetailSchema.nullable().optional(),
+  previousReadyRevision: ProseRevisionDetailSchema.nullable().optional(),
+  canRestore: z.boolean().optional(),
+  error: z.string().nullable(),
+  stale: z.boolean(),
+});
+export const ProseDetailSchema = z.object({
+  directory: ProseTextSchema,
+  revision: ProseRevisionSchema,
+  targetChapters: ProseChapterNumberSchema,
+  acceptedChapters: z.number().int().nonnegative(),
+  completed: z.boolean(),
+  blockingReason: z.string().nullable(),
+  chapters: z.array(ProseChapterDetailSchema),
+});
+export type ProseReviewOutput = z.infer<typeof ProseReviewOutputSchema>;
+export type ProseReviewReport = z.infer<typeof ProseReviewReportSchema>;
+export type ProseSummaryOutput = z.infer<typeof ProseSummaryOutputSchema>;
+export type ProseChapterDetail = z.infer<typeof ProseChapterDetailSchema>;
+export type ProseDetail = z.infer<typeof ProseDetailSchema>;
+export type ConfirmProseBody = z.infer<typeof ConfirmProseBodySchema>;
+export type OverrideProseReviewBody = z.infer<typeof OverrideProseReviewBodySchema>;
+
+// ---------------- 书本交付：配置、快照与独立任务 ----------------
+export const BookFormatSchema = z.enum(['txt', 'markdown', 'epub']);
+export type BookFormat = z.infer<typeof BookFormatSchema>;
+export const BookCopyModeSchema = z.enum(['plain-with-title', 'plain-body', 'markdown-source']);
+export type BookCopyMode = z.infer<typeof BookCopyModeSchema>;
+export const BookFormatsSchema = z
+  .array(BookFormatSchema)
+  .min(1)
+  .refine((v) => new Set(v).size === v.length, '格式不能重复');
+export const BookTitleOverrideSchema = z.object({
+  chapterNumber: ProseChapterNumberSchema,
+  title: z.string().trim().min(1).max(200),
+  outlineRevision: z.number().int().nonnegative(),
+});
+export const BookMetadataSchema = z.object({
+  title: z.string().trim().max(200),
+  author: z.string().trim().max(100),
+  introduction: z.string().trim().max(10000),
+  chapterTitles: z.array(BookTitleOverrideSchema),
+});
+export const SaveBookSettingsSchema = BookMetadataSchema.extend({
+  title: z.string().trim().min(1).max(200),
+  expectedRevision: z.number().int().nonnegative(),
+}).refine(
+  (v) => new Set(v.chapterTitles.map((t) => t.chapterNumber)).size === v.chapterTitles.length,
+  '章号不能重复',
+);
+export const BookSettingsSchema = BookMetadataSchema.extend({
+  revision: z.number().int().nonnegative(),
+  outlineRevision: z.number().int().nonnegative(),
+  chapters: z.array(
+    z.object({
+      chapterNumber: ProseChapterNumberSchema,
+      title: z.string(),
+      defaultTitle: z.string(),
+      needsCheck: z.boolean(),
+    }),
+  ),
+});
+export type BookSettings = z.infer<typeof BookSettingsSchema>;
+export type BookMetadata = z.infer<typeof BookMetadataSchema>;
+export const BookDiagnosticSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  chapterNumber: ProseChapterNumberSchema.optional(),
+  line: z.number().int().positive().optional(),
+});
+export type BookDiagnostic = z.infer<typeof BookDiagnosticSchema>;
+export const BookDocumentSchema = z.object({
+  chapterNumber: ProseChapterNumberSchema,
+  title: z.string(),
+  source: z.string(),
+  sourceHash: ProseHashSchema,
+  plain: z.string(),
+  markdown: z.string(),
+  html: z.string(),
+});
+export type BookDocument = z.infer<typeof BookDocumentSchema>;
+export const BookManifestSchema = z.object({
+  version: z.literal(1),
+  rendererVersion: z.literal('v1'),
+  metadata: BookMetadataSchema,
+  contentFingerprint: ProseHashSchema,
+  evidenceFingerprint: ProseHashSchema,
+  chapters: z.array(
+    z.object({ chapterNumber: ProseChapterNumberSchema, path: z.string(), hash: ProseHashSchema }),
+  ),
+});
+export type BookManifest = z.infer<typeof BookManifestSchema>;
+export const BookPreviewBodySchema = z.object({
+  chapterNumber: ProseChapterNumberSchema.optional(),
+  previewToken: ProseHashSchema.optional(),
+});
+export const BookPreviewSchema = z.object({
+  metadata: BookMetadataSchema,
+  chapters: z.array(
+    z.object({ chapterNumber: ProseChapterNumberSchema, title: z.string(), accepted: z.boolean() }),
+  ),
+  selected: BookDocumentSchema.nullable(),
+  diagnostics: z.array(BookDiagnosticSchema),
+  previewToken: ProseHashSchema.nullable(),
+  contentFingerprint: ProseHashSchema.nullable(),
+});
+export type BookPreview = z.infer<typeof BookPreviewSchema>;
+export const BookCopyBodySchema = z.object({ mode: BookCopyModeSchema });
+export const BookCopyResponseSchema = z.object({
+  text: z.string(),
+  sourceHash: ProseHashSchema,
+  checkedAt: z.string(),
+});
+export const CreateBookJobSchema = z.object({
+  requestId: z.string().uuid(),
+  previewToken: ProseHashSchema,
+  formats: BookFormatsSchema,
+});
+export const RetryBookJobSchema = z.object({ formats: BookFormatsSchema });
+export const BookJobStatusSchema = z.enum([
+  'preparing',
+  'generating',
+  'succeeded',
+  'partial_failed',
+  'failed',
+  'paused',
+  'deleting',
+  'delete_failed',
+]);
+export const BookFileSchema = z.object({
+  format: BookFormatSchema,
+  status: z.enum(['pending', 'generating', 'succeeded', 'failed']),
+  size: z.number().nullable(),
+  error: z.string().nullable(),
+});
+export const BookJobSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  chapterCount: z.number().int().nonnegative(),
+  status: BookJobStatusSchema,
+  error: z.string().nullable(),
+  snapshotId: z.string().nullable(),
+  contentFingerprint: z.string().nullable(),
+  versionStatus: z.enum(['current', 'historical', 'unverifiable']),
+  createdAt: z.string(),
+  files: z.array(BookFileSchema),
+});
+export type BookJob = z.infer<typeof BookJobSchema>;
+export const BookJobListSchema = z.object({
+  items: z.array(BookJobSchema),
+  page: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+});
+
+/** Web 模型设置查询不包含密钥本身。 */
+export const ApiKeySettingsSchema = z.strictObject({
+  hasApiKey: z.boolean(),
+  baseUrl: z.string(),
+  draftModel: z.string(),
+  reasoningModel: z.string(),
+});
+export type ApiKeySettings = z.infer<typeof ApiKeySettingsSchema>;
+export const ApiKeyUpdateSchema = z.discriminatedUnion('action', [
+  z.strictObject({
+    action: z.literal('replace'),
+    apiKey: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4096)
+      .regex(/^[A-Za-z0-9._-]+$/, 'API Key 格式不正确'),
+  }),
+  z.strictObject({ action: z.literal('remove') }),
+]);
+export type ApiKeyUpdate = z.infer<typeof ApiKeyUpdateSchema>;

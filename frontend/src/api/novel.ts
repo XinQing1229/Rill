@@ -1,3 +1,5 @@
+import { PremisePreviewSchema } from '@rill/shared';
+import type { PreviewPremiseBody, PremisePreview } from '@rill/shared';
 import type { OutlineDetail, OutlinePlan, ChapterSummary, OutlineConfirm } from '@rill/shared';
 import type { z } from 'zod';
 import type {
@@ -72,7 +74,9 @@ export function generateStage(id: string, body: GenerateBody = {}): Promise<Gene
  * action 为 regenerate 时重新生成本阶段而非推进。
  */
 export function confirmStage(id: string, action?: ConfirmAction): Promise<ProjectDetail> {
-  return post(`${base}/projects/${id}/confirm`, action ? { action } : {});
+  return post(`${base}/projects/${id}/confirm`, {
+    ...(action ? { action } : {}),
+  });
 }
 
 /** 回退到指定阶段（其后的阶段产物标记失效） */
@@ -107,6 +111,7 @@ export function parseAnswers(project: ProjectDetail): QuestionnaireAnswers {
 export function getOutline(id: string): Promise<OutlineDetail> {
   return get(`${base}/projects/${id}/outline`);
 }
+
 export function configureOutline(
   id: string,
   expectedRevision: number,
@@ -133,4 +138,61 @@ export function saveOutlineChapter(
 }
 export function confirmOutline(id: string, confirmation: OutlineConfirm): Promise<ProjectDetail> {
   return post(`${base}/projects/${id}/confirm`, confirmation);
+}
+
+export function getProse(id: string): Promise<import('@rill/shared').ProseDetail> {
+  return get(`${base}/projects/${id}/prose`);
+}
+export function proseChapterAction(
+  id: string,
+  number: number,
+  action: 'retry' | 'override' | 'confirm' | 'restore',
+  body: unknown = {},
+): Promise<import('@rill/shared').ProseDetail> {
+  return post(`${base}/projects/${id}/prose/chapters/${number}/${action}`, body);
+}
+
+/** 建议修改只生成候选，不改变正式种子或推进位置。 */
+export async function previewPremise(
+  id: string,
+  body: PreviewPremiseBody,
+): Promise<PremisePreview> {
+  return PremisePreviewSchema.parse(await post(`${base}/projects/${id}/premise/preview`, body));
+}
+
+export function adoptPremise(id: string, candidateId: string): Promise<ProjectDetail> {
+  return post(`${base}/projects/${id}/premise/adopt`, { candidateId });
+}
+
+export function createProseRevision(
+  id: string,
+  number: number,
+  body: import('@rill/shared').CreateProseRevisionBody,
+): Promise<import('@rill/shared').ProseRevision> {
+  return post(`${base}/projects/${id}/prose/chapters/${number}/revisions`, body);
+}
+export function getProseRevision(
+  id: string,
+  number: number,
+  revisionId: string,
+): Promise<import('@rill/shared').ProseRevision> {
+  return get(`${base}/projects/${id}/prose/chapters/${number}/revisions/${revisionId}`);
+}
+export function applyProseRevision(
+  id: string,
+  number: number,
+  revisionId: string,
+  body: import('@rill/shared').ApplyProseRevisionBody,
+): Promise<import('@rill/shared').ProseRevision> {
+  return post(
+    `${base}/projects/${id}/prose/chapters/${number}/revisions/${revisionId}/apply`,
+    body,
+  );
+}
+export function discardProseRevision(
+  id: string,
+  number: number,
+  revisionId: string,
+): Promise<import('@rill/shared').ProseRevision> {
+  return post(`${base}/projects/${id}/prose/chapters/${number}/revisions/${revisionId}/discard`);
 }

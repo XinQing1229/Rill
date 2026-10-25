@@ -1,3 +1,4 @@
+import { renderWritingStyle } from '../writing-style/writing-style.registry.js';
 import { commitGeneration } from '../pipeline/execution-context.js';
 import { Injectable } from '@nestjs/common';
 import {
@@ -14,12 +15,11 @@ import { newTraceId } from '../../ai/observability/trace.js';
 import { PrismaService } from '../prisma.service.js';
 import { profileFor } from '../genre/genre-profile.js';
 import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.js';
-import { premiseV1 } from '../prompts/premise-template.js';
+import { resolvePremiseTitle } from './title-policy.js';
+import { premiseV2, premiseV3 } from '../prompts/premise-template.js';
 
 const LENGTH_LABEL: Record<string, string> = {
   short: '短篇',
-  medium: '中篇',
-  long: '长篇',
 };
 
 @Injectable()
@@ -34,7 +34,8 @@ export class PremiseGenerator implements StageGenerator {
     private readonly prisma: PrismaService,
     private readonly artifacts: ArtifactRegistry,
   ) {
-    this.prompts.register(premiseV1);
+    this.prompts.register(premiseV2);
+    this.prompts.register(premiseV3);
     this.artifacts.registerGenerator(this);
     this.artifacts.registerStorage('premise', this.prisma);
   }
@@ -47,18 +48,21 @@ export class PremiseGenerator implements StageGenerator {
     const profile = profileFor(answers.genre);
     const project = await this.prisma.project.findUniqueOrThrow({
       where: { id: projectId },
-      select: { title: true },
+      select: { title: true, titleSource: true },
     });
 
-    const prompt = this.prompts.render('premise', 'v1', {
+    const prompt = this.prompts.render('premise', 'v3', {
+      writingStyle: renderWritingStyle(answers.writingStyle, 'premise'),
       genre: profile.label,
       genreTraits: profile.traits.join('、'),
-      tone: answers.tone,
+      tone: answers.tone ?? '',
+      profession: answers.extras?.profession ?? '',
       pov: answers.pov,
       length: LENGTH_LABEL[answers.length] ?? answers.length,
-      title: project.title,
+      title: !project.titleSource || project.titleSource === 'author' ? project.title : '',
       idea: answers.idea ?? '',
       taboos: (answers.taboos ?? []).join('、'),
+      relation: answers.extras?.relation ?? '',
     });
 
     const traceId = newTraceId();
@@ -68,26 +72,27 @@ export class PremiseGenerator implements StageGenerator {
       { traceId, usage: 'draft' },
     );
 
+    const resolved = resolvePremiseTitle(project, premise);
     const usage = this.usageRecorder.get(traceId);
     await commitGeneration(this.prisma, async (tx) => {
       await tx.premise.update({
         where: { projectId },
         data: {
-          data: JSON.stringify(premise),
+          data: JSON.stringify(resolved.premise),
           stale: false,
           promptTokens: usage?.promptTokens ?? 0,
           completionTokens: usage?.completionTokens ?? 0,
         },
       });
 
-      if (usage)
-        await tx.project.update({
-          where: { id: projectId },
-          data: {
-            promptTokens: { increment: usage.promptTokens },
-            completionTokens: { increment: usage.completionTokens },
-          },
-        });
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          ...resolved.project,
+          promptTokens: { increment: usage?.promptTokens ?? 0 },
+          completionTokens: { increment: usage?.completionTokens ?? 0 },
+        },
+      });
     });
   }
 }

@@ -1,3 +1,4 @@
+import { renderWritingStyle } from '../writing-style/writing-style.registry.js';
 import {
   BadRequestException,
   ConflictException,
@@ -33,7 +34,7 @@ import { LlmService } from '../../ai/llm.service.js';
 import { PromptRegistry } from '../../ai/prompts/prompt.registry.js';
 import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
 import { newTraceId } from '../../ai/observability/trace.js';
-import { outlineChaptersV1, outlinePlanV1 } from '../prompts/outline-template.js';
+import { outlineChaptersV2, outlinePlanV2 } from '../prompts/outline-template.js';
 import { splitBatches, validateChapters, validatePlan } from './outline.validation.js';
 
 type OutlineRow = Prisma.OutlineGetPayload<{ include: { batches: true } }>;
@@ -72,8 +73,8 @@ export class OutlineService {
     // 注册依赖和失效规则；实际生成由子图的各节点执行。
     artifacts.registerGenerator(this);
     artifacts.registerStorage('outline', prisma);
-    prompts.register(outlinePlanV1);
-    prompts.register(outlineChaptersV1);
+    prompts.register(outlinePlanV2);
+    prompts.register(outlineChaptersV2);
   }
 
   async generate(_context: StageContext, _answers: QuestionnaireAnswers, projectId: string) {
@@ -105,8 +106,8 @@ export class OutlineService {
     const row = await this.row(id);
     if (!row)
       return {
-        targetChapters: profileFor(project.genre as QuestionnaireAnswers['genre'])
-          .suggestedChapters[project.length as QuestionnaireAnswers['length']],
+        targetChapters: profileFor(project.genre as QuestionnaireAnswers['genre']).suggestedChapters
+          .short,
         step: 'planning',
         revision: 0,
         planRevision: 0,
@@ -220,7 +221,7 @@ export class OutlineService {
           data: {
             projectId: id,
             targetChapters: profileFor(project.genre as QuestionnaireAnswers['genre'])
-              .suggestedChapters[project.length as QuestionnaireAnswers['length']],
+              .suggestedChapters.short,
           },
           include: { batches: true },
         });
@@ -231,7 +232,7 @@ export class OutlineService {
       const project = await tx.project.findUniqueOrThrow({ where: { id } });
       // 在同一事务调用统一存储适配，编辑失败时失效操作也回滚。
       const { storageFor } = await import('../pipeline/stage-storage.js');
-      for (const stage of ['beats', 'prose'] as Stage[]) {
+      for (const stage of ['prose'] as Stage[]) {
         await tx.stageRun.updateMany({ where: { projectId: id, stage }, data: { stale: true } });
         await storageFor(stage)?.invalidate(tx, project.id, true);
       }
@@ -464,7 +465,8 @@ export class OutlineService {
     await this.call<OutlinePlan>(
       id,
       schema,
-      this.prompts.render('outline-plan', 'v1', {
+      this.prompts.render('outline-plan', 'v2', {
+        writingStyle: renderWritingStyle(state.answers.writingStyle, 'outline'),
         context: JSON.stringify({ answers: state.answers, ...context }),
         target: String(current.targetChapters),
       }),
@@ -536,7 +538,8 @@ export class OutlineService {
         await this.call<{ chapters: ChapterSummary[] }>(
           id,
           schema,
-          this.prompts.render('outline-chapters', 'v1', {
+          this.prompts.render('outline-chapters', 'v2', {
+            writingStyle: renderWritingStyle(state.answers.writingStyle, 'outline'),
             context: JSON.stringify({ answers: state.answers, ...context }),
             plan: JSON.stringify(plan),
             previous: JSON.stringify(previous),

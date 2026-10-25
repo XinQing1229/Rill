@@ -1,4 +1,5 @@
 const jest = import.meta.jest;
+import { ProseReviewOutputSchema, ProseSummaryGenerationSchema } from '@rill/shared';
 import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -24,6 +25,10 @@ describe('大纲 HTTP 契约', () => {
   let prisma: PrismaService;
   let id: string;
   let cid: string;
+  const complete = jest.fn(async () => ({
+    content: '# 调查\n\n主角发现了一封信。',
+    finishReason: 'stop',
+  }));
   const completeStructured = jest.fn();
   const base = () => `/api/novel/projects/${id}/outline`;
   beforeAll(async () => {
@@ -31,11 +36,12 @@ describe('大纲 HTTP 契约', () => {
       imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }), NovelModule],
     })
       .overrideProvider(LlmService)
-      .useValue({ completeStructured })
+      .useValue({ complete, completeStructured })
       .overrideProvider(ConfigService)
       .useValue(
         new ConfigService({
           ...configuration(),
+          PROSE_OUTPUT_DIR: join(directory, 'output'),
           pipeline: { checkpointFile: join(directory, 'cp.db') },
         }),
       )
@@ -70,6 +76,26 @@ describe('大纲 HTTP 契约', () => {
     });
     completeStructured.mockImplementation(async (schema, messages) => {
       const prompt = messages[0].content as string;
+      if (schema === ProseReviewOutputSchema)
+        return schema.parse({
+          scores: {
+            consistency: 90,
+            character: 90,
+            pacing: 90,
+            continuity: 90,
+            foreshadow: 90,
+            hook: 90,
+            aesthetic: 90,
+          },
+          issues: [],
+        });
+      if (schema === ProseSummaryGenerationSchema)
+        return schema.parse({
+          events: ['主角发现信件'],
+          characterChanges: [],
+          foreshadowing: [],
+          continuity: '继续调查',
+        });
       if (prompt.includes('当前批次：')) {
         const batch = JSON.parse(prompt.split('当前批次：')[1]);
         return schema.parse({
@@ -118,7 +144,7 @@ describe('大纲 HTTP 契约', () => {
     await request(app.getHttpServer())
       .get(base())
       .expect(200)
-      .expect((res) => expect(res.body.targetChapters).toBe(8));
+      .expect((res) => expect(res.body.targetChapters).toBe(4));
     expect(await prisma.outline.findUnique({ where: { projectId: id } })).toBeNull();
     await request(app.getHttpServer())
       .patch(`${base()}/config`)
@@ -171,9 +197,19 @@ describe('大纲 HTTP 契约', () => {
     await request(app.getHttpServer())
       .post(`/api/novel/projects/${id}/confirm`)
       .send({ target: 'outline', expectedRevision: detail.revision })
-      .expect(400); // beats 仍是占位节点
+      .expect(201); // 确认大纲后直接生成正文，逐章等待接受。
     detail = (await request(app.getHttpServer()).get(base())).body;
     expect(detail.step).toBe('confirmed');
     expect(detail.chapters[0].events).toBe('人工事件');
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(await prisma.beatBook.count({ where: { projectId: id } })).toBe(0);
+    expect(
+      (await request(app.getHttpServer()).get(`/api/novel/projects/${id}`)).body.currentStage,
+    ).toBe('prose');
+    await request(app.getHttpServer()).get(`/api/novel/projects/${id}/beats`).expect(404);
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/rollback`)
+      .send({ stage: 'beats' })
+      .expect(400);
   });
 });

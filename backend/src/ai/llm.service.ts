@@ -58,7 +58,10 @@ export class LlmService implements OnModuleInit {
   ): Promise<CompletionResult> {
     const traceId = options.traceId ?? newTraceId();
     const usageKind: ModelUsage = options.usage ?? 'draft';
-    const resolved = this.registry.resolve(usageKind);
+    // 输出上限必须用于构造模型，当前 SDK 会忽略 invoke 中的 maxTokens。
+    const resolved = this.registry.resolve(usageKind, {
+      ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
+    });
 
     try {
       const response = await this.runWithRetry(traceId, () =>
@@ -66,7 +69,6 @@ export class LlmService implements OnModuleInit {
         resolved.model.invoke(messages as any, {
           signal: options.signal ?? executionContext.getStore()?.signal,
           callbacks: [this.usage.callbacks(traceId, resolved.modelName)],
-          ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
         }),
       );
 
@@ -77,6 +79,7 @@ export class LlmService implements OnModuleInit {
       return {
         model: resolved.modelName,
         content: message?.content ?? '',
+        finishReason: message?.response_metadata?.finish_reason,
         reasoning: message?.additional_kwargs?.reasoning_content || undefined,
         usage: tokenUsage
           ? {
@@ -118,14 +121,42 @@ export class LlmService implements OnModuleInit {
     try {
       for (let attempt = 0; attempt <= maxRepairAttempts; attempt += 1) {
         try {
+          let truncated = false;
           const result = await this.runWithRetry(traceId, () =>
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             runnable.invoke(currentMessages as any, {
               signal: options.signal ?? executionContext.getStore()?.signal,
-              callbacks: [this.usage.callbacks(traceId, resolved.modelName)],
+              callbacks: [
+                this.usage.callbacks(traceId, resolved.modelName),
+                {
+                  handleLLMEnd: (output: unknown) => {
+                    const result = output as {
+                      generations?: Array<
+                        Array<{
+                          generationInfo?: { finish_reason?: string };
+                          message?: { response_metadata?: { finish_reason?: string } };
+                        }>
+                      >;
+                    };
+                    if (
+                      result.generations?.some((group) =>
+                        group.some(
+                          (g) =>
+                            (g.generationInfo?.finish_reason ??
+                              g.message?.response_metadata?.finish_reason) === 'length',
+                        ),
+                      )
+                    )
+                      truncated = true;
+                  },
+                },
+              ],
             }),
           );
-          return result as T;
+          if (options.rejectTruncated && truncated)
+            throw new BadGatewayException('正文修改输出被截断，请重试');
+          // 在修复循环内校验，确保数量、长度等生成约束失败后也能回喂重试。
+          return schema.parse(result) as T;
         } catch (error) {
           lastError = error;
           if (attempt === maxRepairAttempts) break;

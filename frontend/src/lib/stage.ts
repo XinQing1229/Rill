@@ -1,5 +1,6 @@
 import {
   GENRE_LABELS,
+  WRITING_STYLE_LABELS,
   LENGTH_LABELS,
   STAGES,
   STAGE_LABELS,
@@ -59,6 +60,7 @@ export function upstreamRequires(stage: Stage, projectStages: Stage[]): Stage[] 
     return projectStages.includes('world') ? ['premise', 'world'] : ['premise'];
   }
   if (stage === 'relations') return ['characters'];
+  if (stage === 'prose') return ['outline'];
   return [];
 }
 
@@ -114,6 +116,7 @@ export const IN_SCOPE_STAGES: Stage[] = [
   'characters',
   'relations',
   'outline',
+  'prose',
 ];
 
 export function timelineStages(projectStages: Stage[]): Stage[] {
@@ -147,14 +150,17 @@ export function stageTokens(
   };
 }
 
-/** 问卷已选维度的只读摘要（类型 · 篇幅 · 基调 · 视角） */
+/** 问卷已选维度的只读摘要（类型 · 篇幅 · 阅读体验 · 视角） */
 export function chosenDimensionsLabel(answers: QuestionnaireAnswers): string {
   return [
     GENRE_LABELS[answers.genre] ?? answers.genre,
-    LENGTH_LABELS[answers.length] ?? answers.length,
+    LENGTH_LABELS[answers.length] ?? '历史篇幅',
     answers.tone,
     answers.pov,
-  ].join(' · ');
+    `文风：${answers.writingStyle ? WRITING_STYLE_LABELS[answers.writingStyle.id] : '未指定'}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /** 产物行的 token 用量摘要（mono 展示） */

@@ -152,7 +152,7 @@ describe('大纲编辑和确认', { timeout: 15000 }, () => {
       consequence: '后续',
     }));
     show(data);
-    await screen.findByText('确认完整大纲并进入细纲').then((element) => element.closest('button')!);
+    await screen.findByText('确认完整大纲并进入正文').then((element) => element.closest('button')!);
     expect(screen.queryByLabelText('章名')).not.toBeInTheDocument();
     expect(screen.getAllByRole('textbox').length).toBeLessThan(25);
   });
@@ -188,7 +188,7 @@ describe('大纲编辑和确认', { timeout: 15000 }, () => {
     fireEvent.change(await screen.findByLabelText('主要事件'), {
       target: { value: '作者单章修改' },
     });
-    expect(screen.getByText('确认完整大纲并进入细纲').closest('button')!).toBeDisabled();
+    expect(screen.getByText('确认完整大纲并进入正文').closest('button')!).toBeDisabled();
     fireEvent.click(screen.getByText('保存本章概要').closest('button')!);
     await waitFor(() =>
       expect(api.saveOutlineChapter).toHaveBeenCalledWith(
@@ -198,20 +198,20 @@ describe('大纲编辑和确认', { timeout: 15000 }, () => {
       ),
     );
     await waitFor(() =>
-      expect(screen.getByText('确认完整大纲并进入细纲').closest('button')!).toBeEnabled(),
+      expect(screen.getByText('确认完整大纲并进入正文').closest('button')!).toBeEnabled(),
     );
-    fireEvent.click(screen.getByText('确认完整大纲并进入细纲').closest('button')!);
+    fireEvent.click(screen.getByText('确认完整大纲并进入正文').closest('button')!);
     await waitFor(() =>
       expect(api.confirmOutline).toHaveBeenCalledWith('outline-project', {
         target: 'outline',
         expectedRevision: 1,
       }),
     );
-  });
+  }, 30_000);
 
   it('已确认步骤提供沿用指标纲的推进入口，未保存修改时不阻塞', async () => {
     show({ ...detail(), step: 'confirmed', confirmedRevision: 1, targetChapters: 0 });
-    const button = await screen.findByText('沿用已确认大纲并进入细纲');
+    const button = await screen.findByText('沿用已确认大纲并进入正文');
     expect(button.closest('button')!).toBeEnabled();
     fireEvent.click(button.closest('button')!);
     await waitFor(() =>

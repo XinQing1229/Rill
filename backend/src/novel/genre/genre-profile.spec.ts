@@ -8,8 +8,8 @@ describe('genre profile', () => {
       expect(profile.label).toBeTruthy();
       expect(profile.traits.length).toBeGreaterThan(0);
       expect(profile.suggestedWordsPerChapter).toBeGreaterThan(0);
-      for (const length of ['short', 'medium', 'long'] as StoryLength[]) {
-        expect(profile.suggestedChapters[length]).toBeGreaterThan(0);
+      for (const length of ['short'] as StoryLength[]) {
+        expect(profile.suggestedChapters[length]).toBe(4);
       }
     }
   });
@@ -21,7 +21,6 @@ describe('genre profile', () => {
       'characters',
       'relations',
       'outline',
-      'beats',
       'prose',
     ]);
   });

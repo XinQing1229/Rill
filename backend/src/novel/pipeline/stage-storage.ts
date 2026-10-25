@@ -9,6 +9,15 @@ import {
 
 type Row = { status: string; stale: boolean; data?: string };
 export interface StageSnapshot {
+  proseBook?: {
+    targetChapters: number;
+    chapters: Array<{
+      confirmedHash: string | null;
+      observedHash: string | null;
+      reviewStatus: string;
+      stale: boolean;
+    }>;
+  } | null;
   premise?: Row | null;
   world?: Row | null;
   characters?: Row[];
@@ -23,6 +32,7 @@ export interface StageSnapshot {
     }
   >;
   outline?: {
+    targetChapters?: number;
     stale: boolean;
     revision: number;
     confirmedRevision: number | null;
@@ -37,6 +47,31 @@ const VISIBLE_PROJECT = { project: { deletedAt: null } };
 
 /** 阶段存储适配集中声明，runner 与上游装配无需识别具体产物表。 */
 export const STAGE_STORAGE = {
+  prose: {
+    invalidate: async (tx: Prisma.TransactionClient, id: string, stale: boolean) => {
+      if (!stale) return;
+      await tx.proseChapter.updateMany({
+        where: { book: { projectId: id, project: { deletedAt: null } } },
+        data: { stale: true, confirmedHash: null, reviewStatus: 'needs_review' },
+      });
+    },
+    rows: (p: StageSnapshot): Row[] =>
+      (p.proseBook?.chapters ?? []).map((c) => ({
+        status:
+          c.confirmedHash &&
+          c.confirmedHash === c.observedHash &&
+          c.reviewStatus === 'confirmed' &&
+          !c.stale
+            ? 'done'
+            : 'pending',
+        stale: c.stale,
+      })),
+    write: async (
+      _tx: Prisma.TransactionClient,
+      _id: string,
+      _data: { status: ArtifactStatus; error: string | null },
+    ) => {},
+  },
   premise: {
     invalidate: (tx: Prisma.TransactionClient, id: string, stale: boolean) =>
       tx.premise.updateMany({ where: { projectId: id, ...VISIBLE_PROJECT }, data: { stale } }),
@@ -75,7 +110,15 @@ export const STAGE_STORAGE = {
           ? { stale: true, confirmedRevision: null, planConfirmedRevision: null }
           : { stale: false },
       }),
-    rows: (_p: StageSnapshot): Row[] => [],
+    rows: (p: StageSnapshot): Row[] =>
+      p.outline
+        ? [
+            {
+              status: p.outline.confirmedRevision === p.outline.revision ? 'done' : 'pending',
+              stale: p.outline.stale,
+            },
+          ]
+        : [],
     write: async (
       _tx: Prisma.TransactionClient,
       _id: string,
@@ -102,6 +145,7 @@ export function storageFor(stage: Stage) {
 export function contextFor(snapshot: StageSnapshot): StageContext {
   const context: StageContext = {};
   for (const [stage, adapter] of Object.entries(STAGE_STORAGE)) {
+    if (stage === 'prose') continue;
     const rows = adapter
       .rows(snapshot)
       .filter((row) => row.status === 'done' && !row.stale && row.data);
@@ -139,6 +183,10 @@ export function contextFor(snapshot: StageSnapshot): StageContext {
       chapters: outline.batches
         .filter((b) => b.planRevision === outline.planRevision && b.status === 'done' && b.data)
         .flatMap((b) => ChapterBatchSchema.parse(JSON.parse(b.data!)).chapters)
+        .filter(
+          (chapter) =>
+            outline.targetChapters === undefined || chapter.number <= outline.targetChapters,
+        )
         .sort((a, b) => a.number - b.number),
     };
   }

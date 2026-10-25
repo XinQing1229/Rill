@@ -121,7 +121,7 @@ describe('PremiseGenerator', () => {
     expect(artifacts.has('premise')).toBe(true);
     expect(artifacts.getGenerator('premise')).toBe(generator);
     expect(() =>
-      prompts.render('premise', 'v1', {
+      prompts.render('premise', 'v2', {
         genre: '悬疑',
         genreTraits: '线索递进',
         tone: '紧张',
@@ -131,7 +131,7 @@ describe('PremiseGenerator', () => {
       }),
     ).not.toThrow();
     expect(() =>
-      prompts.render('premise', 'v1', {
+      prompts.render('premise', 'v2', {
         genre: '悬疑',
         genreTraits: '线索递进',
         tone: '紧张',
@@ -198,6 +198,19 @@ describe('PremiseGenerator', () => {
     const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
     expect(messages[0].content).toContain('自行构思');
     expect(messages[0].content).toContain('失败的具体代价');
+  });
+
+  it('作者自定义关系设定传入种子提示词', async () => {
+    const { generator, completeStructured } = setup();
+    completeStructured.mockResolvedValue(sample);
+    await generator.generate(
+      {},
+      { ...answers, genre: 'yanqing', extras: { relation: '契约搭档逐渐相爱' } },
+      'project-1',
+    );
+    const messages = completeStructured.mock.calls[0][1] as Array<{ content: string }>;
+    expect(messages[0].content).toContain('契约搭档逐渐相爱');
+    expect(messages[0].content).toContain('必须遵守此关系设定');
   });
 
   it('生成失败时不写入产物', async () => {

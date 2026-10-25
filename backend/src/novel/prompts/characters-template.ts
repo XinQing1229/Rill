@@ -3,12 +3,13 @@ import { PromptTemplate } from '../../ai/prompts/prompt.registry.js';
 /**
  * 人物阶段模板。稳定前缀在前，上游产物与人物规模作为变量注入。
  */
-export const charactersV1: PromptTemplate = {
+export const charactersV2: PromptTemplate = {
   name: 'characters',
-  version: 'v1',
+  version: 'v2',
   requiredVariables: ['upstream', 'count'],
   render(variables: Record<string, string>): string {
     return [
+      variables.writingStyle ?? '',
       '你是一位资深的人物设计师，为小说设计动机清晰、彼此纠缠的人物。',
       '请始终使用简体中文；人物要具体可演，避免完美人设与脸谱化反派。',
       `请输出 ${variables.count} 个人物。`,

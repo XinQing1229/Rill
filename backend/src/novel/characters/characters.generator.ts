@@ -1,3 +1,4 @@
+import { renderWritingStyle } from '../writing-style/writing-style.registry.js';
 import { commitGeneration } from '../pipeline/execution-context.js';
 import { Injectable } from '@nestjs/common';
 import { CharacterListSchema, QuestionnaireAnswers, Stage, StageContext } from '@rill/shared';
@@ -8,8 +9,11 @@ import { newTraceId } from '../../ai/observability/trace.js';
 import { PrismaService } from '../prisma.service.js';
 import { GenreProfile, profileFor } from '../genre/genre-profile.js';
 import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.js';
-import { renderUpstreamContext } from '../prompts/upstream-context.js';
-import { charactersV1 } from '../prompts/characters-template.js';
+import {
+  renderQuestionnaireConstraints,
+  renderUpstreamContext,
+} from '../prompts/upstream-context.js';
+import { charactersV2 } from '../prompts/characters-template.js';
 
 /** 问卷「人物数量」选答到人数的映射 */
 const SCALE_COUNTS: Record<string, number> = {
@@ -32,7 +36,7 @@ export class CharacterGenerator implements StageGenerator {
     private readonly prisma: PrismaService,
     private readonly artifacts: ArtifactRegistry,
   ) {
-    this.prompts.register(charactersV1);
+    this.prompts.register(charactersV2);
     this.artifacts.registerGenerator(this);
     // 重新生成人物 → 关系失效
     this.artifacts.registerStorage('characters', this.prisma);
@@ -46,8 +50,11 @@ export class CharacterGenerator implements StageGenerator {
     const profile: GenreProfile = profileFor(answers.genre);
     const count = this.resolveCount(answers, profile);
 
-    const prompt = this.prompts.render('characters', 'v1', {
-      upstream: renderUpstreamContext(context),
+    const prompt = this.prompts.render('characters', 'v2', {
+      writingStyle: renderWritingStyle(answers.writingStyle, 'characters'),
+      upstream: [renderUpstreamContext(context), renderQuestionnaireConstraints(answers)]
+        .filter(Boolean)
+        .join('\n\n'),
       count: String(count),
     });
 

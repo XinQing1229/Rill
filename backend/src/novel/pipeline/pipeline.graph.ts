@@ -37,6 +37,7 @@ export interface PipelineGraphOptions {
     'generatePlan' | 'reviewPlan' | 'expand' | 'reviewOutline',
     (state: PipelineState) => Promise<Partial<PipelineState>>
   >;
+  proseNode?: (state: PipelineState) => Promise<Partial<PipelineState>>;
   /** 该类型声明跳过的阶段，作为跳过判定的二次保障（stages 通常已过滤） */
   skipStages?: Stage[];
 }
@@ -75,7 +76,14 @@ export function buildPipelineGraph(options: PipelineGraphOptions) {
     const next = nextStage(stage, options.stages, skipStages);
     // currentStage 由 runner 维护（表示当前正在处理的阶段）；
     // 推进到下一节点由下面的条件边负责，中断点由 checkpointer 记录
-    if (stage === 'outline' && options.outlineNodes) {
+    if (stage === 'prose' && options.proseNode) {
+      const prose = new StateGraph(PipelineStateAnnotation)
+        .addNode('chapterWorkflow', options.proseNode)
+        .addEdge(START, 'chapterWorkflow')
+        .addEdge('chapterWorkflow', END)
+        .compile();
+      graph.addNode(stage, prose);
+    } else if (stage === 'outline' && options.outlineNodes) {
       const nodes = options.outlineNodes;
       const outline = new StateGraph(PipelineStateAnnotation)
         .addNode('generatePlan', nodes.generatePlan)

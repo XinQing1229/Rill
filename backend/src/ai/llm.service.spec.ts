@@ -2,7 +2,7 @@
 const jest = import.meta.jest;
 
 import { BadGatewayException, Logger } from '@nestjs/common';
-import { SampleBookSchema } from '@rill/shared';
+import { SampleBookSchema, ProseSummaryGenerationSchema } from '@rill/shared';
 import { AiConfig } from './config/ai.config.js';
 import { ModelRegistry } from './models/model.registry.js';
 import { PromptRegistry } from './prompts/prompt.registry.js';
@@ -83,7 +83,7 @@ describe('LlmService.complete', () => {
 
     const result = await service.complete([{ role: 'user', content: 'hi' }]);
 
-    expect(registry.resolve).toHaveBeenCalledWith('draft');
+    expect(registry.resolve).toHaveBeenCalledWith('draft', {});
     expect(result.content).toBe('收到');
     expect(result.usageKind).toBe('draft');
     expect(result.traceId).toBeDefined();
@@ -96,7 +96,7 @@ describe('LlmService.complete', () => {
 
     await service.complete([{ role: 'user', content: 'hi' }], { usage: 'reasoning' });
 
-    expect(registry.resolve).toHaveBeenCalledWith('reasoning');
+    expect(registry.resolve).toHaveBeenCalledWith('reasoning', {});
   });
 
   it('限流错误退避重试后成功', async () => {
@@ -138,6 +138,41 @@ describe('LlmService.complete', () => {
 });
 
 describe('LlmService.completeStructured', () => {
+  it('摘要长度或数量超限时回喂校验错误，修复后返回完整结果', async () => {
+    const { service, structuredInvoke } = setup();
+    const valid = {
+      events: ['林舟被安排次日加试'],
+      characterChanges: [],
+      foreshadowing: [],
+      continuity: '承接次日加试。',
+    };
+    structuredInvoke
+      .mockResolvedValueOnce({ ...valid, events: ['字'.repeat(121)] })
+      .mockResolvedValueOnce({ ...valid, events: Array(7).fill('事件') })
+      .mockResolvedValueOnce(valid);
+    await expect(
+      service.completeStructured(ProseSummaryGenerationSchema, [{ role: 'user', content: '正文' }]),
+    ).resolves.toEqual(valid);
+    expect(structuredInvoke).toHaveBeenCalledTimes(3);
+    const messages = structuredInvoke.mock.calls[2][0] as Array<{ content: string }>;
+    expect(messages[1].content).toContain('120');
+    expect(messages[2].content).toContain('6');
+  });
+  it('完整正文修订拒绝供应商标记为截断的结构化结果', async () => {
+    const { service, structuredInvoke } = setup({ structured: { maxRepairAttempts: 0 } });
+    structuredInvoke.mockImplementation(async (_messages, options) => {
+      for (const callback of options.callbacks ?? [])
+        callback.handleLLMEnd?.({
+          generations: [[{ message: { response_metadata: { finish_reason: 'length' } } }]],
+        });
+      return { title: 't', summary: 's', tags: ['a'] };
+    });
+    await expect(
+      service.completeStructured(SampleBookSchema, [{ role: 'user', content: '正文' }], {
+        rejectTruncated: true,
+      }),
+    ).rejects.toThrow('截断');
+  });
   it('结构化生成强制关闭思维链', async () => {
     const { service, registry, structuredInvoke } = setup();
     structuredInvoke.mockResolvedValue({ title: 't', summary: 's', tags: ['a'] });

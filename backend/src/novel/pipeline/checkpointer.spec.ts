@@ -13,7 +13,7 @@ function makeState(overrides: Partial<PipelineState> = {}): PipelineState {
     currentStage: 'premise',
     answers: {
       genre: 'xuanhuan',
-      length: 'medium',
+      length: 'short',
       tone: '热血',
       pov: '第三人称限知',
     } as QuestionnaireAnswers,

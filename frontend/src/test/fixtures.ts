@@ -110,7 +110,6 @@ const stageList: ProjectDetail['stages'] = [
   'characters',
   'relations',
   'outline',
-  'beats',
   'prose',
 ];
 
@@ -119,14 +118,14 @@ export function makeProject(overrides: Partial<ProjectDetail> = {}): ProjectDeta
     id: 'prj_1',
     title: '青川令',
     genre: 'xuanhuan',
-    length: 'medium',
+    length: 'short',
     mode: 'manual',
     currentStage: 'premise',
     status: 'idle',
     stages: stageList,
     answers: JSON.stringify({
       genre: 'xuanhuan',
-      length: 'medium',
+      length: 'short',
       tone: '厚重',
       pov: '第三人称限知',
     }),
@@ -149,7 +148,7 @@ export function makeSummary(overrides: Partial<ProjectSummary> = {}): ProjectSum
     id: 'prj_1',
     title: '青川令',
     genre: 'xuanhuan',
-    length: 'medium',
+    length: 'short',
     mode: 'manual',
     currentStage: 'premise',
     status: 'idle',
@@ -161,21 +160,17 @@ export function makeSummary(overrides: Partial<ProjectSummary> = {}): ProjectSum
 }
 
 export const questionnaireFixture: QuestionnaireDefinition = {
-  version: 'v1',
+  version: 'v2',
   questions: [
     {
       key: 'length',
       label: '篇幅',
       required: true,
-      options: [
-        { value: 'short', label: '短篇' },
-        { value: 'medium', label: '中篇' },
-        { value: 'long', label: '长篇' },
-      ],
+      options: [{ value: 'short', label: '短篇' }],
     },
     {
       key: 'tone',
-      label: '基调',
+      label: '阅读体验',
       required: true,
       options: [
         { value: '热血', label: '热血' },
@@ -190,6 +185,12 @@ export const questionnaireFixture: QuestionnaireDefinition = {
         { value: '第一人称', label: '第一人称' },
         { value: '第三人称限知', label: '第三人称限知' },
       ],
+    },
+    {
+      key: 'writingStyle',
+      label: '文风',
+      required: false,
+      options: [{ value: 'short-satisfying', label: '短篇爽文' }],
     },
     {
       key: 'extras.characterScale',

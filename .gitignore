@@ -26,3 +26,6 @@ npm-debug.log*
 
 # os
 .DS_Store
+
+# 本地小说正文与投影
+output/

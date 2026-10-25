@@ -3,12 +3,13 @@ import { PromptTemplate } from '../../ai/prompts/prompt.registry.js';
 /**
  * 关系阶段模板。稳定前缀在前，上游产物作为变量注入。
  */
-export const relationsV1: PromptTemplate = {
+export const relationsV2: PromptTemplate = {
   name: 'relations',
-  version: 'v1',
+  version: 'v2',
   requiredVariables: ['upstream'],
   render(variables: Record<string, string>): string {
     return [
+      variables.writingStyle ?? '',
       '你是一位资深的人物关系设计师，为已定稿的人物编织关系网。',
       '请始终使用简体中文；关系要有张力与戏剧潜力，避免全都和睦无害。',
       '重要约束：',

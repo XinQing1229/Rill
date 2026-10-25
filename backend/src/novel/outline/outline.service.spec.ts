@@ -28,7 +28,7 @@ copyFileSync(
 );
 process.env.DATABASE_URL = `file:${join(dbDirectory, 'test.db')}`;
 
-function makePlan(id: string, count = 8): OutlinePlan {
+function makePlan(id: string, count = 4): OutlinePlan {
   return {
     mainline: '追查真相',
     turningPoints: ['盟友背叛'],
@@ -93,7 +93,7 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     config = new ConfigService({ pipeline: { checkpointFile: join(directory, 'cp.db') } });
     artifacts = new ArtifactRegistry();
     assembler = new UpstreamAssembler(prisma, artifacts);
-    count = 8;
+    count = 4;
     failStart = null;
     callCount = 0;
     blockedCall = null;
@@ -190,6 +190,7 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     });
   });
   afterEach(() => {
+    pipeline.onModuleDestroy();
     rmSync(directory, { recursive: true, force: true });
   });
 
@@ -200,7 +201,7 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
         OutlineConfigBodySchema.safeParse({ expectedRevision: 0, targetChapters: value }).success,
       ).toBe(false);
     expect(() => validatePlan(makePlan(characterId, 8), 9, [characterId])).toThrow('总章数');
-    expect(() => validatePlan(makePlan('bad'), 8, [characterId])).toThrow('引用');
+    expect(() => validatePlan(makePlan('bad', 8), 8, [characterId])).toThrow('引用');
     const chapters = makeChapters(characterId, 1, 8);
     chapters[1].number = 1;
     expect(() =>
@@ -211,13 +212,9 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     expect(splitBatches(makePlan(characterId, 200))).toHaveLength(20);
   });
 
-  it('默认读取无写入，章数按篇幅提供', async () => {
-    expect((await outline.get(id)).targetChapters).toBe(8);
+  it('短篇默认 4 章，读取不写入', async () => {
+    expect((await outline.get(id)).targetChapters).toBe(4);
     expect(await prisma.outline.count()).toBe(0);
-    await prisma.project.update({ where: { id }, data: { length: 'medium' } });
-    expect((await outline.get(id)).targetChapters).toBe(40);
-    await prisma.project.update({ where: { id }, data: { length: 'long' } });
-    expect((await outline.get(id)).targetChapters).toBe(200);
   });
 
   it('将确认种子的故事发动机作为设定数据传入全书规划', async () => {
@@ -236,6 +233,8 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
 
     await pipeline.generate(id, { wait: true });
 
+    expect(lastPlanPrompt).toContain('短篇爽文 v1');
+    expect(lastPlanPrompt).toContain('反击应改变利益、关系或处境');
     expect(lastPlanPrompt).toContain('三日内找到旧案证人');
     expect(lastPlanPrompt).toContain('官府封锁证人住处');
     expect(lastPlanPrompt).toContain('证据被销毁');
@@ -259,22 +258,24 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     });
     detail = await outline.get(id);
     expect(detail.step).toBe('outline_review');
-    expect(detail.chapters).toHaveLength(8);
+    expect(detail.chapters).toHaveLength(4);
     const changed = { ...detail.chapters[0], events: '作者修改的事件' };
     await outline.saveChapter(id, detail.revision, 1, changed);
     detail = await outline.get(id);
     expect(detail.plan?.ending).toBe('作者结局');
     expect(detail.confirmedRevision).toBeNull();
-    // 下一阶段未实现，确认事实已提交，流程停在 beats 的预期占位错误。
+    // 下一阶段未实现，确认事实已提交，流程停在 prose 的预期占位错误。
     await expect(
       pipeline.confirm(id, 'confirm', { target: 'outline', expectedRevision: detail.revision }),
     ).rejects.toThrow('尚未实现');
     expect((await outline.get(id)).step).toBe('confirmed');
-    expect((await assembler.assemble(id, 'beats')).outline?.chapters[0].events).toBe(
+    expect((await assembler.assemble(id, 'prose')).outline?.chapters[0].events).toBe(
       '作者修改的事件',
     );
     const before = callCount;
-    await pipeline.confirm(id, 'confirm', { target: 'outline', expectedRevision: detail.revision });
+    await expect(
+      pipeline.confirm(id, 'confirm', { target: 'outline', expectedRevision: detail.revision }),
+    ).rejects.toThrow('正文必须使用逐章接受接口');
     expect(callCount).toBe(before);
   });
 
@@ -305,7 +306,9 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     });
     detail = await outline.get(id);
     expect(detail.step).toBe('outline_review');
-    expect(detail.chapters).toHaveLength(8);
+    expect(detail.chapters).toHaveLength(4);
+    expect((await pipeline.get(id)).currentStage).toBe('outline');
+    expect((await pipeline.get(id)).stageStates.relations?.status).toBe('done');
   });
 
   it('回退到已确认大纲后不编辑也能一次确认继续推进', async () => {
@@ -316,13 +319,13 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
       expectedRevision: detail.revision,
     });
     detail = await outline.get(id);
-    // 下一阶段尚未实现，确认事实已提交，流程停在 beats 的预期占位错误
+    // 下一阶段尚未实现，确认事实已提交，流程停在 prose 的预期占位错误
     await expect(
       pipeline.confirm(id, 'confirm', { target: 'outline', expectedRevision: detail.revision }),
     ).rejects.toThrow('尚未实现');
     const confirmed = await outline.get(id);
     expect(confirmed.step).toBe('confirmed');
-    expect((await pipeline.get(id)).currentStage).toBe('beats');
+    expect((await pipeline.get(id)).currentStage).toBe('prose');
 
     await pipeline.rollback(id, 'outline');
     expect((await pipeline.get(id)).currentStage).toBe('outline');
@@ -336,7 +339,7 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     // 保留已确认内容并直接进入下一阶段，不重新生成大纲
     expect(callCount).toBe(before);
     expect((await outline.get(id)).step).toBe('confirmed');
-    expect((await pipeline.get(id)).currentStage).toBe('beats');
+    expect((await pipeline.get(id)).currentStage).toBe('prose');
   });
 
   it('内容提交被拒绝时不产生已完成内容，已知用量仍入账', async () => {
@@ -367,8 +370,12 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
       outline,
     );
     await fresh.onModuleInit();
-    await fresh.generate(id, { force: true, wait: true });
-    expect((await outline.get(id)).step).toBe('plan_review');
+    try {
+      await fresh.generate(id, { force: true, wait: true });
+      expect((await outline.get(id)).step).toBe('plan_review');
+    } finally {
+      fresh.onModuleDestroy();
+    }
   });
 
   it('第三批失败，重启后续跑保留前两批人工编辑', async () => {
@@ -391,6 +398,7 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     });
     failStart = null;
     const before = callCount;
+    pipeline.onModuleDestroy();
     pipeline = new PipelineService(
       prisma,
       new QuestionnaireService(),
@@ -422,12 +430,12 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     await outline.savePlan(id, detail.revision, { ...detail.plan!, climax: '新的高潮' });
     detail = await outline.get(id);
     expect(detail.chapters).toHaveLength(0);
-    expect(detail.staleChapters).toHaveLength(8);
+    expect(detail.staleChapters).toHaveLength(4);
     await pipeline.confirm(id, 'confirm', {
       target: 'outline-plan',
       expectedRevision: detail.revision,
     });
-    expect((await outline.get(id)).chapters).toHaveLength(8);
+    expect((await outline.get(id)).chapters).toHaveLength(4);
   });
 
   it('自动模式完成 200 章再推进，已有批次不重复生成', async () => {
@@ -478,13 +486,18 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     await pipeline.generate(id, { wait: true });
     const detail = await outline.get(id);
     const { createCheckpointer } = await import('../pipeline/checkpointer.js');
-    await createCheckpointer(join(directory, 'cp.db')).deleteThread(id);
+    const saver = createCheckpointer(join(directory, 'cp.db'));
+    try {
+      await saver.deleteThread(id);
+    } finally {
+      saver.db.close();
+    }
     await pipeline.confirm(id, 'confirm', {
       target: 'outline-plan',
       expectedRevision: detail.revision,
     });
     expect(callCount).toBe(2);
-    expect((await outline.get(id)).chapters).toHaveLength(8);
+    expect((await outline.get(id)).chapters).toHaveLength(4);
   });
 
   it('拒绝未确认上游和失效大纲消费', async () => {
@@ -499,7 +512,9 @@ describe('大纲生成与真实 checkpoint 恢复', () => {
     });
     await pipeline.generate(id, { wait: true });
     await artifacts.setStale('outline', id, true);
-    expect((await assembler.assemble(id, 'beats')).outline).toBeUndefined();
+    await expect(assembler.assemble(id, 'prose')).rejects.toThrow(
+      '上游阶段 outline 尚未确认完整大纲',
+    );
   });
   it('总预算耗尽保留已完成批次，下一次从未完成部分继续', async () => {
     count = 25;

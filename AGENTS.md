@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-Rill —— 小说创作 Agent：通过结构化问卷收集创作意图，按多阶段流水线（种子 → 世界观 → 人物 → 大纲 → 节拍 → 正文）生成小说，并上传到小说平台。当前阶段：流水线基础与 AI 基建已完成，创作能力按 OpenSpec 变更流程逐个推进。
+Rill —— 小说创作 Agent：通过结构化问卷收集创作意图，按多阶段流水线（种子 → 世界观 → 人物 → 大纲 → 正文）生成小说，并上传到小说平台。当前阶段：流水线基础与 AI 基建已完成，正文创作与交付能力持续完善。
 
 ## 技术栈与结构
 
@@ -31,15 +31,16 @@ Rill —— 小说创作 Agent：通过结构化问卷收集创作意图，按�
 
 ## 开发流程（必须遵守）
 
-1. **所有功能变更走 OpenSpec 流程**：`/opsx:propose` 创建 change 并生成 proposal/design/tasks → `/opsx:apply <name>` 按 tasks.md 实施 → `/opsx:verify <name>` 验证 → `/opsx:archive <name>` 归档。动手写代码前先有已批准的 change。
-2. **提交信息用 conventional commits**：`feat:` / `fix:` / `chore:` / `docs:` / `test:` / `refactor:`。
-3. **契约先行**：新增/修改 API 时，先在 `shared/src/index.ts` 定义 zod schema 与类型，后端校验、前端消费都基于它；结构化 LLM 输出同样用 zod schema 约束。
-4. **测试**：后端行为用 jest 单测覆盖（与源码同目录的 `*.spec.ts`），HTTP 层用 `backend/test/` 下的 supertest e2e；前端组件用 vitest。提交前确保 `npm test` 与 `npm run lint` 通过。
+1. **提交信息用 conventional commits**：`feat:` / `fix:` / `chore:` / `docs:` / `test:` / `refactor:`。
+2. **契约先行**：新增/修改 API 时，先在 `shared/src/index.ts` 定义 zod schema 与类型，后端校验、前端消费都基于它；结构化 LLM 输出同样用 zod schema 约束。
+3. **测试**：后端行为用 jest 单测覆盖（与源码同目录的 `*.spec.ts`），HTTP 层用 `backend/test/` 下的 supertest e2e；前端组件用 vitest。提交前确保 `npm test` 与 `npm run lint` 通过。
+
+> OpenSpec 流程（`/opsx:propose` → `apply` → `verify` → `archive`）为可选的变更管理工具，按需使用，不再作为功能变更的前置要求。
 
 ## 领域约定（小说流水线）
 
-- **问卷先行**：生成种子前必须收集问卷答案，必答 4 项（`genre`、`length`、`tone`、`pov`）缺失时拒绝生成，并返回缺失项名称。
-- **已选维度不交给模型**：用户在问卷中明确选择的维度（类型、篇幅、基调、视角等）直接采用，禁止让模型生成，避免与作者选择冲突。`PremiseSchema` 因此不含这些字段。
+- **问卷先行**：生成种子前必须收集问卷答案，必答 3 项（`genre`、`length`、`pov`）缺失时拒绝生成，并返回缺失项名称。
+- **已选维度不交给模型**：用户在问卷中明确选择的维度（类型、篇幅、视角、文风等）直接采用，禁止让模型生成，避免与作者选择冲突。`PremiseSchema` 因此不含这些字段。
 - **推进模式**：默认 `manual`（每阶段生成后待确认，确认才推进）；`auto` 连续推进，失败停在该阶段，可从失败阶段续跑，不重复已完成阶段。
 - **防重与回退**：生成中拒绝同一阶段的重复生成请求；回退到已完成阶段时，其下游所有阶段产物标记为 stale，需重新生成。
 - 阶段定义、产物 schema 的权威来源是 `shared/src/index.ts` 与 `openspec/specs/novel-pipeline/spec.md`，实现与之冲突时以规范为准并先修规范。

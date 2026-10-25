@@ -1,0 +1,212 @@
+.prose-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block: 20px;
+}
+
+.prose-toolbar .ant-select {
+  min-width: min(240px, 100%);
+  max-width: 100%;
+}
+
+.prose-steps {
+  margin-block: 24px;
+}
+
+.prose-control {
+  margin-block: 20px;
+  padding: 20px;
+  border: 1px solid var(--ant-color-border-secondary, #e6e8e7);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--ant-color-bg-container, #fff);
+}
+
+.prose-control .ant-alert {
+  margin-block: 12px;
+}
+
+.prose-help {
+  color: var(--ant-color-text-secondary, #646866);
+  line-height: 1.7;
+}
+
+.prose-actions {
+  margin-top: 8px;
+}
+
+.prose-override {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.prose-override .ant-btn {
+  justify-self: start;
+}
+
+.prose-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ant-color-border-secondary, #e6e8e7);
+}
+
+.prose-return-button.ant-btn {
+  min-height: 44px;
+  padding-inline: 20px;
+  color: var(--primary-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.prose-return-button.ant-btn:hover,
+.prose-return-button.ant-btn:focus-visible {
+  color: var(--primary-ink);
+  background: color-mix(in srgb, var(--accent) 88%, black);
+  border-color: color-mix(in srgb, var(--accent) 88%, black);
+}
+
+.prose-return-button.ant-btn:active {
+  color: var(--primary-ink);
+  background: color-mix(in srgb, var(--accent) 76%, black);
+  border-color: color-mix(in srgb, var(--accent) 76%, black);
+}
+
+@media (max-width: 575px) {
+  .prose-control {
+    padding: 16px;
+  }
+
+  .prose-actions,
+  .prose-actions .ant-space-item,
+  .prose-actions .ant-btn {
+    width: 100%;
+  }
+
+  .prose-actions .ant-btn,
+  .prose-toolbar .ant-btn,
+  .prose-override .ant-btn {
+    min-height: 44px;
+    height: auto;
+    white-space: normal;
+  }
+}
+
+.prose-summary {
+  display: grid;
+  gap: 28px;
+  max-width: 80ch;
+  min-width: 0;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.prose-summary-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.prose-summary-heading h3.ant-typography {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.prose-summary-list {
+  margin: 0;
+  padding-inline-start: 1.75em;
+}
+
+.prose-summary-list li {
+  padding-inline-start: 4px;
+  white-space: pre-wrap;
+}
+
+.prose-summary-list li + li {
+  margin-top: 10px;
+}
+
+.prose-summary-section .ant-typography.prose-summary-continuity {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+.prose-summary-section > .ant-typography {
+  margin-bottom: 0;
+}
+
+#prose-revision {
+  scroll-margin-top: 24px;
+  overflow-wrap: anywhere;
+}
+#prose-revision .prose-suggestions {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border-color, #d9d9d9);
+  border-radius: 8px;
+}
+#prose-revision .prose-suggestions legend {
+  padding-inline: 6px;
+  font-size: 14px;
+}
+#prose-revision button {
+  min-height: 44px;
+}
+#prose-revision details {
+  margin-block: 12px;
+}
+#prose-revision summary {
+  cursor: pointer;
+  padding-block: 8px;
+}
+#prose-revision label[for] {
+  display: block;
+  margin-block: 12px 8px;
+}
+@media (max-width: 600px) {
+  #prose-revision .ant-card-body {
+    padding: 16px;
+  }
+  #prose-revision .prose-suggestions {
+    padding: 12px;
+  }
+}
+
+/* 正文工作台窄屏使用顶部导航，为长建议与差异保留阅读宽度。 */
+@media (max-width: 719px) {
+  .shell:has([aria-label='正文工作台']) {
+    display: block;
+  }
+  .shell:has([aria-label='正文工作台']) > .sidebar {
+    position: static;
+    height: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .shell:has([aria-label='正文工作台']) .sidebar > .group-label {
+    display: none;
+  }
+  .shell:has([aria-label='正文工作台']) .sidebar > .side-group,
+  .shell:has([aria-label='正文工作台']) .sidebar > .bottom {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+  .shell:has([aria-label='正文工作台']) .side-stages,
+  .shell:has([aria-label='正文工作台']) .sidebar > .bottom {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shell:has([aria-label='正文工作台']) > .sheet {
+    margin: 0;
+    border-radius: 0;
+  }
+  .shell:has([aria-label='正文工作台']) .page {
+    padding: 16px;
+  }
+}

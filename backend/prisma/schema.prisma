@@ -11,48 +11,58 @@ datasource db {
 }
 
 model Project {
-  id                   String   @id @default(cuid())
+  id                   String    @id @default(cuid())
   title                String
+  titleSource          String    @default("author") // author | placeholder | generated
   genre                String
   length               String
-  mode                 String   @default("manual") // manual | auto
+  mode                 String    @default("manual") // manual | auto
   currentStage         String
-  status               String   @default("idle") // idle | running | done | failed
+  status               String    @default("idle") // idle | running | done | failed
   // 问卷答案（JSON 字符串）：必答 4 项 + 选答 + 类型级联项
-  answers              String   @default("{}")
-  questionnaireVersion String   @default("v1")
-  promptTokens         Int      @default(0)
-  completionTokens     Int      @default(0)
+  answers              String    @default("{}")
+  questionnaireVersion String    @default("v1")
+  promptTokens         Int       @default(0)
+  completionTokens     Int       @default(0)
   runId                String?
   // 软删除时刻：非空即已移入回收站，恢复时置空（产物数据在回收站期间保持冻结）
   deletedAt            DateTime?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  outline Outline?
-  premise Premise?
-  world WorldSetting?
-  characters Character[]
-  relations Relation[]
-  stageRuns StageRun[]
+  exportSettings BookExportSettings?
+  exportSnapshots BookExportSnapshot[]
+  exportJobs BookExportJob[]
+  proseBook       ProseBook?
+  proseOperations ProseOperation[]
+  proseUsages     ProseUsage[]
+  proseRevisions ProseRevision[]
+  outline         Outline?
+  premiseRevisions PremiseRevision[]
+  premise         Premise?
+  world           WorldSetting?
+  characters      Character[]
+  relations       Relation[]
+  stageRuns       StageRun[]
+  beatBook        BeatBook?
 
   @@index([deletedAt])
 }
 
 model StageRun {
-  stale            Boolean  @default(false)
-  id               String   @id @default(cuid())
+  stale            Boolean   @default(false)
+  id               String    @id @default(cuid())
   projectId        String
-  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   runId            String
   stage            String
-  status           String   @default("pending")
+  status           String    @default("pending")
   error            String?
-  promptTokens     Int      @default(0)
-  completionTokens Int      @default(0)
+  promptTokens     Int       @default(0)
+  completionTokens Int       @default(0)
   confirmedAt      DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([projectId, runId, stage])
   @@index([projectId, stage, updatedAt])
@@ -111,67 +121,333 @@ model Character {
 }
 
 model Relation {
-  id          String    @id @default(cuid())
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   // 规范化：fromId 恒小于 toId，同一对人物只存一条；方向性由 fromRole/toRole 表达
-  fromId      String
-  toId        String
-  from        Character @relation("RelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  to          Character @relation("RelationTo", fields: [toId], references: [id], onDelete: Cascade)
-  type        String
-  fromRole    String
-  toRole      String
-  description String
-  status      String    @default("pending")
-  stale       Boolean   @default(false)
-  promptTokens Int      @default(0)
-  completionTokens Int  @default(0)
-  error       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  fromId           String
+  toId             String
+  from             Character @relation("RelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to               Character @relation("RelationTo", fields: [toId], references: [id], onDelete: Cascade)
+  type             String
+  fromRole         String
+  toRole           String
+  description      String
+  status           String    @default("pending")
+  stale            Boolean   @default(false)
+  promptTokens     Int       @default(0)
+  completionTokens Int       @default(0)
+  error            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([projectId, fromId, toId])
   @@index([projectId])
 }
 
-
 model Outline {
-  id String @id @default(cuid())
-  projectId String @unique
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  targetChapters Int
-  step String @default("planning")
-  revision Int @default(0)
-  planRevision Int @default(0)
+  id                    String         @id @default(cuid())
+  projectId             String         @unique
+  project               Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  targetChapters        Int
+  step                  String         @default("planning")
+  revision              Int            @default(0)
+  planRevision          Int            @default(0)
   planConfirmedRevision Int?
-  confirmedRevision Int?
-  planData String?
-  stale Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  batches OutlineBatch[]
+  confirmedRevision     Int?
+  planData              String?
+  stale                 Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  batches               OutlineBatch[]
 }
 
 model OutlineBatch {
-  id String @id @default(cuid())
-  outlineId String
-  outline Outline @relation(fields: [outlineId], references: [id], onDelete: Cascade)
-  planRevision Int
-  startChapter Int
-  endChapter Int
-  segmentId String
-  data String?
-  status String @default("pending")
-  error String?
-  promptTokens Int @default(0)
-  completionTokens Int @default(0)
+  id               String  @id @default(cuid())
+  outlineId        String
+  outline          Outline @relation(fields: [outlineId], references: [id], onDelete: Cascade)
+  planRevision     Int
+  startChapter     Int
+  endChapter       Int
+  segmentId        String
+  data             String?
+  status           String  @default("pending")
+  error            String?
+  promptTokens     Int     @default(0)
+  completionTokens Int     @default(0)
+
   @@unique([outlineId, planRevision, startChapter])
 }
 
 model OutlineUsage {
-  traceId String @id
-  projectId String
-  promptTokens Int
+  traceId          String @id
+  projectId        String
+  promptTokens     Int
   completionTokens Int
+}
+
+// 历史节拍仅归档保留，不再作为创作阶段或正文依赖。
+model BeatBook {
+  id                String        @id @default(cuid())
+  projectId         String        @unique
+  project           Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revision          Int           @default(0)
+  confirmedRevision Int?
+  outlineRevision   Int
+  targetChapters    Int
+  stale             Boolean       @default(false)
+  error             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  chapters          BeatChapter[]
+}
+
+model BeatChapter {
+  id               String   @id @default(cuid())
+  beatBookId       String
+  beatBook         BeatBook @relation(fields: [beatBookId], references: [id], onDelete: Cascade)
+  chapterNumber    Int
+  data             String?
+  status           String   @default("pending")
+  stale            Boolean  @default(false)
+  revision         Int      @default(0)
+  error            String?
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([beatBookId, chapterNumber])
+  @@index([beatBookId, status])
+}
+
+model BeatUsage {
+  traceId          String @id
+  projectId        String
+  chapterNumber    Int
+  promptTokens     Int
+  completionTokens Int
+}
+
+model ProseBook {
+  id                String         @id @default(cuid())
+  projectId         String         @unique
+  project           Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  targetChapters    Int
+  revision          Int            @default(0)
+  completedRevision Int?
+  stale             Boolean        @default(false)
+  chapters          ProseChapter[]
+}
+
+model ProseChapter {
+  id                  String            @id @default(cuid())
+  bookId              String
+  book                ProseBook         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterNumber       Int
+  relativePath        String
+  generationStatus    String            @default("pending")
+  reviewStatus        String            @default("pending")
+  fileStatus          String            @default("missing")
+  revision            Int               @default(0)
+  observedHash        String?
+  confirmedHash       String?
+  outlineRevision     Int               @default(0)
+  // 历史接受证据的版本盐，新章节保持 0，不再引用 BeatChapter。
+  beatChapterRevision Int               @default(0)
+  prefixFingerprint   String?
+  error               String?
+  stale               Boolean           @default(false)
+  promptTokens        Int               @default(0)
+  completionTokens    Int               @default(0)
+  reviews             ProseReview[]
+  summaries           ProseSummary[]
+  acceptances         ProseAcceptance[]
+
+  @@unique([bookId, chapterNumber])
+}
+
+model ProseReview {
+  id                    String       @id @default(cuid())
+  chapterId             String
+  chapter               ProseChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  sourceHash            String
+  dependencyFingerprint String
+  promptVersion         String
+  status                String
+  verdict               String?
+  data                  String?
+  overrideReason        String?
+  error                 String?
+  createdAt             DateTime     @default(now())
+}
+
+model ProseSummary {
+  id                String       @id @default(cuid())
+  chapterId         String
+  chapter           ProseChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  sourceHash        String
+  prefixFingerprint String
+  reviewId          String
+  data              String?
+  status            String
+  acceptedAt        DateTime?
+  error             String?
+  createdAt         DateTime     @default(now())
+}
+
+model ProseAcceptance {
+  id                    String       @id @default(cuid())
+  chapterId             String
+  chapter               ProseChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  reviewId              String
+  summaryId             String
+  sourceHash            String
+  dependencyFingerprint String
+  overrideReason        String?
+  acceptedAt            DateTime     @default(now())
+
+  @@unique([chapterId, reviewId, summaryId])
+}
+
+model ProseOperation {
+  id                    String  @id @default(cuid())
+  projectId             String
+  project               Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runId                 String
+  kind                  String
+  chapterNumber         Int
+  baseHash              String?
+  resultHash            String?
+  dependencyFingerprint String
+  candidatePath         String?
+  phase                 String  @default("prepared")
+  error                 String?
+}
+
+model ProseUsage {
+  traceId          String  @id
+  projectId        String
+  project          Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterNumber    Int
+  purpose          String
+  promptTokens     Int
+  completionTokens Int
+}
+
+model ProseDeletion {
+  projectId String   @id
+  error     String?
+  createdAt DateTime @default(now())
+}
+
+
+model BookExportSettings {
+  projectId String @id
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  data String
+  revision Int @default(1)
+}
+
+model BookExportSnapshot {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contentFingerprint String
+  evidenceFingerprint String
+  manifestPath String
+  manifestHash String
+  title String
+  chapterCount Int
+  createdAt DateTime @default(now())
+  job BookExportJob?
+}
+
+model BookExportJob {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestId String
+  requestHash String
+  previewToken String
+  formats String
+  snapshotId String? @unique
+  snapshot BookExportSnapshot? @relation(fields: [snapshotId], references: [id])
+  status String @default("preparing")
+  token String?
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  files BookExportFile[]
+  @@unique([projectId, requestId])
+  @@index([status])
+}
+
+model BookExportFile {
+  id String @id @default(cuid())
+  jobId String
+  job BookExportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  format String
+  status String @default("pending")
+  path String?
+  hash String?
+  size Int?
+  error String?
+  attempts Int @default(0)
+  @@unique([jobId, format])
+}
+
+// 候选与正式种子隔离；请求身份用于防重，不作为历史版本编辑系统。
+model PremiseRevision {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestId String
+  feedback String
+  status String @default("generating")
+  data String?
+  changeSummaryData String?
+  baseHash String
+  runId String
+  originalStatus String
+  adoptedAt DateTime?
+  error String?
+  promptTokens Int @default(0)
+  completionTokens Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([projectId, requestId])
+}
+
+model ProseRevision {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterNumber Int
+  requestId String
+  requestHash String
+  baseRevision Int
+  baseHash String
+  dependencyFingerprint String
+  originalContent String
+  feedback String
+  reviewId String?
+  suggestionsData String
+  content String?
+  resultHash String?
+  explanation String?
+  responsesData String @default("[]")
+  changesData String @default("[]")
+  status String @default("generating")
+  error String?
+  runId String
+  originalStatus String
+  applyRequestId String?
+  applyPhase String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  appliedAt DateTime?
+
+  @@unique([projectId, requestId])
+  @@index([projectId, chapterNumber, createdAt])
 }

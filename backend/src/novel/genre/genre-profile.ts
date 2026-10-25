@@ -4,6 +4,7 @@ export interface ExtraQuestion {
   key: string;
   label: string;
   options: string[];
+  allowCustom?: boolean;
 }
 
 export interface GenreProfile {
@@ -25,8 +26,8 @@ export interface GenreProfile {
   extraQuestions: ExtraQuestion[];
 }
 
-const CHAPTERS: Record<StoryLength, number> = { short: 8, medium: 40, long: 200 };
-const CHARACTERS: Record<StoryLength, number> = { short: 4, medium: 8, long: 16 };
+const CHAPTERS: Record<StoryLength, number> = { short: 4 };
+const CHARACTERS: Record<StoryLength, number> = { short: 4 };
 
 export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
   xuanhuan: {
@@ -52,9 +53,7 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldMaxTokens: 2048,
     suggestedWordsPerChapter: 2200,
     traits: ['贴近现实', '人际冲突驱动', '职业细节真实'],
-    extraQuestions: [
-      { key: 'profession', label: '主角职业', options: ['商战', '医者', '文娱', '其他'] },
-    ],
+    extraQuestions: [],
   },
   xuanyi: {
     label: '悬疑',
@@ -105,9 +104,7 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     worldMaxTokens: 2048,
     suggestedWordsPerChapter: 2000,
     traits: ['情感推进清晰', '关系张力足', '细节有温度'],
-    extraQuestions: [
-      { key: 'relation', label: '关系设定', options: ['青梅竹马', '敌对轉愛', '重生追妻', '其他'] },
-    ],
+    extraQuestions: [],
   },
   other: {
     label: '其他',
@@ -122,15 +119,7 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
   },
 };
 
-const ALL_STAGES: Stage[] = [
-  'premise',
-  'world',
-  'characters',
-  'relations',
-  'outline',
-  'beats',
-  'prose',
-];
+const ALL_STAGES: Stage[] = ['premise', 'world', 'characters', 'relations', 'outline', 'prose'];
 
 /** 阶段列表 = 完整流程 − 该类型声明跳过的阶段 */
 export function stagesFor(genre: Genre): Stage[] {

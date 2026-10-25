@@ -16,11 +16,15 @@ export interface CompleteOptions {
 }
 
 export interface StructuredOptions extends CompleteOptions {
+  /** 完整正文修订不接受已知被供应商截断的结构化输出。 */
+  rejectTruncated?: boolean;
   /** 修复重试次数上限；不传则使用配置值 */
   maxRepairAttempts?: number;
 }
 
 export interface CompletionResult {
+  /** 模型停止原因，用于识别正文截断。 */
+  finishReason?: string;
   model: string;
   content: string;
   reasoning?: string;

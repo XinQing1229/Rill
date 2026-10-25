@@ -183,7 +183,8 @@ export function ProjectListPage() {
                   <span className="t">
                     {project.title}
                     <span className="sub">
-                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length]} ·{' '}
+                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length] ?? '历史篇幅'}{' '}
+                      ·{' '}
                       {project.deletedAt
                         ? `删除于 ${formatUpdatedAt(project.deletedAt)}`
                         : '已删除'}
@@ -228,8 +229,8 @@ export function ProjectListPage() {
                   <span className="t">
                     {project.title}
                     <span className="sub">
-                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length]} ·{' '}
-                      {project.mode === 'manual' ? '手动推进' : '自动推进'}
+                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length] ?? '历史篇幅'}{' '}
+                      · {project.mode === 'manual' ? '手动推进' : '自动推进'}
                     </span>
                   </span>
                   <span className="stage-cell">

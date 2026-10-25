@@ -23,7 +23,7 @@ describe('useQuestionnaire 级联', () => {
     const { result } = renderHook(() => useQuestionnaire('xuanhuan' as Genre));
 
     expect(result.current.loading).toBe(true);
-    await waitFor(() => expect(result.current.data?.version).toBe('v1'));
+    await waitFor(() => expect(result.current.data?.version).toBe('v2'));
     expect(mockGetQuestionnaire).toHaveBeenCalledWith('xuanhuan');
   });
 

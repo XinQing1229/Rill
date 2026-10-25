@@ -1,3 +1,4 @@
+import { API_KEY_ENV_PATH, backendEnvPath, KeySettingsService } from './key-settings.service.js';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AI_CONFIG, parseAiConfig } from './config/ai.config.js';
@@ -8,6 +9,8 @@ import { LlmService } from './llm.service.js';
 
 @Module({
   providers: [
+    { provide: API_KEY_ENV_PATH, useFactory: backendEnvPath },
+    KeySettingsService,
     {
       provide: AI_CONFIG,
       inject: [ConfigService],
@@ -19,6 +22,6 @@ import { LlmService } from './llm.service.js';
     UsageRecorder,
     LlmService,
   ],
-  exports: [LlmService, UsageRecorder, PromptRegistry],
+  exports: [KeySettingsService, LlmService, UsageRecorder, PromptRegistry],
 })
 export class AiModule {}

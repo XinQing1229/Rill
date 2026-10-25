@@ -1,3 +1,4 @@
+import { renderWritingStyle } from '../writing-style/writing-style.registry.js';
 import { commitGeneration } from '../pipeline/execution-context.js';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { QuestionnaireAnswers, RelationListSchema, Stage, StageContext } from '@rill/shared';
@@ -7,8 +8,11 @@ import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
 import { newTraceId } from '../../ai/observability/trace.js';
 import { PrismaService } from '../prisma.service.js';
 import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.js';
-import { renderUpstreamContext } from '../prompts/upstream-context.js';
-import { relationsV1 } from '../prompts/relations-template.js';
+import {
+  renderQuestionnaireConstraints,
+  renderUpstreamContext,
+} from '../prompts/upstream-context.js';
+import { relationsV2 } from '../prompts/relations-template.js';
 
 interface NormalizedRelation {
   fromId: string;
@@ -31,14 +35,14 @@ export class RelationGenerator implements StageGenerator {
     private readonly prisma: PrismaService,
     private readonly artifacts: ArtifactRegistry,
   ) {
-    this.prompts.register(relationsV1);
+    this.prompts.register(relationsV2);
     this.artifacts.registerGenerator(this);
     this.artifacts.registerStorage('relations', this.prisma);
   }
 
   async generate(
     context: StageContext,
-    _answers: QuestionnaireAnswers,
+    answers: QuestionnaireAnswers,
     projectId: string,
   ): Promise<void> {
     const characters = await this.prisma.character.findMany({
@@ -48,8 +52,11 @@ export class RelationGenerator implements StageGenerator {
       throw new BadRequestException('至少需要两个已确认人物才能生成关系');
     }
 
-    const prompt = this.prompts.render('relations', 'v1', {
-      upstream: renderUpstreamContext(context),
+    const prompt = this.prompts.render('relations', 'v2', {
+      writingStyle: renderWritingStyle(answers.writingStyle, 'relations'),
+      upstream: [renderUpstreamContext(context), renderQuestionnaireConstraints(answers)]
+        .filter(Boolean)
+        .join('\n\n'),
     });
 
     const traceId = newTraceId();

@@ -29,14 +29,17 @@ export class UpstreamAssembler {
         world: true,
         characters: true,
         relations: true,
-        stageRuns: { orderBy: { updatedAt: 'desc' } },
+        stageRuns: { orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }] },
       },
     });
     if (!project) throw new NotFoundException(`项目不存在: ${projectId}`);
 
     const generator = this.artifacts.getGenerator(targetStage);
     const answers = JSON.parse(project.answers) as QuestionnaireAnswers;
-    const requires = generator?.requires(answers) ?? [];
+    if (answers.length !== 'short')
+      throw new BadRequestException('当前仅支持短篇小说，历史项目可查看，请新建短篇项目继续创作');
+    const requires =
+      generator?.requires(answers) ?? (targetStage === 'prose' ? ['outline' as Stage] : []);
 
     for (const stage of requires) {
       const state = this.readStageState(project, stage);
@@ -54,7 +57,16 @@ export class UpstreamAssembler {
       }
     }
 
-    return this.artifacts.context(project);
+    const context = this.artifacts.context(project);
+    if (
+      targetStage === 'prose' &&
+      (!context.outline ||
+        context.outline.chapters.length !== project.outline?.targetChapters ||
+        context.outline.chapters.some((c, i) => c.number !== i + 1))
+    ) {
+      throw new BadRequestException('完整大纲章节缺失或章号不连续，请先修复大纲');
+    }
+    return context;
   }
 
   /** 读取某阶段的聚合状态（1:1 产物直接读；1:N 产物按行聚合） */
@@ -70,18 +82,19 @@ export class UpstreamAssembler {
   ): StageState | undefined {
     const execution = project.stageRuns?.find((run) => run.stage === stage);
     const rows = storageFor(stage)?.rows(project) ?? [];
+    const legacyRows = rows;
     const legacy =
-      rows.length === 0
+      legacyRows.length === 0
         ? undefined
         : {
-            status: rows.every((row) => row.status === 'done')
+            status: legacyRows.every((row) => row.status === 'done')
               ? 'done'
-              : rows.some((row) => row.status === 'failed')
+              : legacyRows.some((row) => row.status === 'failed')
                 ? 'failed'
-                : rows.some((row) => row.status === 'generating')
+                : legacyRows.some((row) => row.status === 'generating')
                   ? 'generating'
                   : 'pending',
-            stale: rows.some((row) => row.stale),
+            stale: legacyRows.some((row) => row.stale),
           };
     return execution
       ? {

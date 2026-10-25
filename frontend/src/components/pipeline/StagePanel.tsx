@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { PremiseRevisionCard } from '../premise/PremiseRevisionCard';
+import { ProseWorkbench } from '../prose/ProseWorkbench';
 import { OutlineWorkbench } from '../outline/OutlineWorkbench';
 import { Alert, Button, Popconfirm, Skeleton } from 'antd';
 import type { ZodType } from 'zod';
@@ -79,8 +82,9 @@ interface Props {
   project: ProjectDetail;
   stage: Stage;
   busy: boolean;
+  onBusyChange?: (busy: boolean) => void;
   onOutlineRefresh?: () => void;
-  onGenerate: (force: boolean) => void;
+  onGenerate: (force: boolean) => void | Promise<void>;
   onConfirm: () => void;
   onRollback: (stage: Stage) => void;
 }
@@ -89,12 +93,29 @@ interface Props {
 export function StagePanel({
   project,
   stage,
-  busy,
+  busy: parentBusy,
+  onBusyChange,
   onGenerate,
   onConfirm,
   onRollback,
   onOutlineRefresh,
 }: Props) {
+  const [revisionBusy, setRevisionBusy] = useState(false);
+  const busy = parentBusy || revisionBusy || project.status === 'running';
+  const revisionBusyChanged = (value: boolean) => {
+    setRevisionBusy(value);
+    onBusyChange?.(value);
+  };
+  if (stage === 'prose')
+    return (
+      <ProseWorkbench
+        key={project.id}
+        project={project}
+        busy={busy}
+        onGenerate={onGenerate}
+        onChanged={onOutlineRefresh}
+      />
+    );
   if (stage === 'outline')
     return (
       <OutlineWorkbench
@@ -274,19 +295,25 @@ export function StagePanel({
               阶段操作
             </span>
             <span style={{ flex: 1 }} />
-            {isCurrent && project.mode === 'manual' && !stale && (
-              <Button type="primary" onClick={onConfirm}>
-                确认并推进
-              </Button>
-            )}
+            {isCurrent &&
+              !stale &&
+              (project.mode === 'manual' ||
+                (stage === 'premise' && project.stageStates?.premise?.confirmedAt === null)) && (
+                <Button type="primary" disabled={busy} onClick={onConfirm}>
+                  确认并推进
+                </Button>
+              )}
             <Popconfirm
               title="重新生成将覆盖已有产物"
               description="其后阶段的产物也会标记为失效，确定继续？"
               okText="重新生成"
               cancelText="取消"
+              disabled={busy}
               onConfirm={() => onGenerate(true)}
             >
-              <Button size="small">重新生成</Button>
+              <Button size="small" disabled={busy}>
+                重新生成
+              </Button>
             </Popconfirm>
             {!isCurrent && (
               <Popconfirm
@@ -294,12 +321,24 @@ export function StagePanel({
                 description="其后的阶段产物将被标记为失效，需要重新生成。确定回退？"
                 okText="回退"
                 cancelText="取消"
+                disabled={busy}
                 onConfirm={() => onRollback(stage)}
               >
-                <Button size="small">回退到此阶段</Button>
+                <Button size="small" disabled={busy}>
+                  回退到此阶段
+                </Button>
               </Popconfirm>
             )}
           </div>
+          {stage === 'premise' && !stale && (
+            <PremiseRevisionCard
+              key={project.id}
+              project={project}
+              busy={parentBusy || project.status === 'running'}
+              onBusyChange={revisionBusyChanged}
+              onChanged={onOutlineRefresh}
+            />
+          )}
         </>
       )}
     </div>

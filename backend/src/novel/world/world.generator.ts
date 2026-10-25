@@ -1,3 +1,4 @@
+import { renderWritingStyle } from '../writing-style/writing-style.registry.js';
 import { commitGeneration } from '../pipeline/execution-context.js';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { QuestionnaireAnswers, Stage, StageContext, worldSchemaFor } from '@rill/shared';
@@ -9,7 +10,7 @@ import { PrismaService } from '../prisma.service.js';
 import { profileFor } from '../genre/genre-profile.js';
 import { ArtifactRegistry, StageGenerator } from '../pipeline/artifact.registry.js';
 import { renderUpstreamContext } from '../prompts/upstream-context.js';
-import { worldV1 } from '../prompts/world-template.js';
+import { worldV2, worldV3 } from '../prompts/world-template.js';
 
 @Injectable()
 export class WorldGenerator implements StageGenerator {
@@ -23,7 +24,8 @@ export class WorldGenerator implements StageGenerator {
     private readonly prisma: PrismaService,
     private readonly artifacts: ArtifactRegistry,
   ) {
-    this.prompts.register(worldV1);
+    this.prompts.register(worldV2);
+    this.prompts.register(worldV3);
     this.artifacts.registerGenerator(this);
     this.artifacts.registerStorage('world', this.prisma);
   }
@@ -38,11 +40,13 @@ export class WorldGenerator implements StageGenerator {
       throw new BadRequestException(`类型「${profile.label}」不生成世界观阶段`);
     }
 
-    const prompt = this.prompts.render('world', 'v1', {
+    const prompt = this.prompts.render('world', 'v3', {
+      writingStyle: renderWritingStyle(answers.writingStyle, 'world'),
       upstream: renderUpstreamContext(context),
       genre: profile.label,
       genreTraits: profile.traits.join('、'),
-      tone: answers.tone,
+      tone: answers.tone ?? '',
+      profession: answers.extras?.profession ?? '',
       tier: profile.worldWeight,
     });
 

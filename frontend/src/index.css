@@ -1171,3 +1171,22 @@ a.row:hover {
 .arc-head > .ant-btn {
   margin-bottom: 12px;
 }
+
+/* 创作意图在窄内容区将摘要放到表单后，保持输入和操作可读。 */
+@media (max-width: 1100px) {
+  .creation-intent .wizard-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .creation-intent .summary-rail {
+    position: static;
+  }
+}
+
+@media (max-width: 719px) {
+  .creation-intent .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .creation-intent .wizard-foot {
+    flex-wrap: wrap;
+  }
+}

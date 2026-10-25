@@ -87,7 +87,7 @@ describe('WorldGenerator', () => {
     expect(artifacts.has('world')).toBe(true);
     expect(artifacts.getGenerator('world')).toBe(generator);
     expect(() =>
-      prompts.render('world', 'v1', {
+      prompts.render('world', 'v2', {
         upstream: '【种子设定】',
         genre: '玄幻',
         genreTraits: '设定自洽',
@@ -105,8 +105,8 @@ describe('WorldGenerator', () => {
       genreTraits: '设定自洽',
       tone: '厚重',
     };
-    const light = prompts.render('world', 'v1', { ...base, tier: 'light' });
-    const detailed = prompts.render('world', 'v1', { ...base, tier: 'detailed' });
+    const light = prompts.render('world', 'v2', { ...base, tier: 'light' });
+    const detailed = prompts.render('world', 'v2', { ...base, tier: 'detailed' });
 
     for (const prompt of [light, detailed]) {
       expect(prompt).toContain('限制、代价、压力或可利用的机会');

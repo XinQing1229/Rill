@@ -1,3 +1,4 @@
+import { ApiKeySettingsPage } from './pages/ApiKeySettingsPage';
 import { useMemo, useState } from 'react';
 import { Route, Routes, useLocation, Link } from 'react-router-dom';
 import { STAGE_LABELS, type ProjectDetail, type Stage } from '@rill/shared';
@@ -7,7 +8,7 @@ import { ProjectWorkspacePage } from './pages/ProjectWorkspacePage';
 import { HealthCard } from './components/HealthCard';
 import { LlmPingCard } from './components/LlmPingCard';
 import { useProjectCount } from './hooks/useProjectCount';
-import { WorkspaceProjectContext } from './hooks/useWorkspaceProject';
+import { type WorkspaceView, WorkspaceProjectContext } from './hooks/useWorkspaceProject';
 import { readStageState, timelineStages, type StageState } from './lib/stage';
 
 /** 侧栏阶段状态 pill（深色底配色） */
@@ -52,12 +53,14 @@ function SideStageItem({
 }: {
   stage: Stage;
   project: ProjectDetail;
-  viewedStage: Stage | null;
-  onSelect: (stage: Stage | null) => void;
+  viewedStage: WorkspaceView | null;
+  onSelect: (stage: WorkspaceView | null) => void;
 }) {
   const state = readStageState(project, stage);
   const isCurrent = stage === project.currentStage;
-  const isViewed = viewedStage === stage || (viewedStage === null && isCurrent);
+  const isViewed =
+    (viewedStage?.kind === 'stage' && viewedStage.stage === stage) ||
+    (viewedStage === null && isCurrent);
   const cls = ['side-stage', 'clickable', state?.status ?? 'pending', isViewed ? 'viewed' : '']
     .filter(Boolean)
     .join(' ');
@@ -67,9 +70,9 @@ function SideStageItem({
       role="button"
       tabIndex={0}
       aria-current={isViewed ? 'true' : undefined}
-      onClick={() => onSelect(isCurrent ? null : stage)}
+      onClick={() => onSelect(isCurrent ? null : { kind: 'stage', stage })}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onSelect(isCurrent ? null : stage);
+        if (e.key === 'Enter') onSelect(isCurrent ? null : { kind: 'stage', stage });
       }}
     >
       <span className="dot" />
@@ -189,13 +192,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { count } = useProjectCount(location.pathname);
   const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [viewedStage, setViewedStage] = useState<Stage | null>(null);
+  const [viewedStage, setViewedStage] = useState<WorkspaceView | null>(null);
   const contextValue = useMemo(
     () => ({ project, setProject, viewedStage, setViewedStage }),
     [project, viewedStage],
   );
   const selected = useMemo(() => {
     if (location.pathname === '/new') return 'new';
+    if (location.pathname === '/settings') return 'settings';
     if (location.pathname === '/health') return 'health';
     if (location.pathname.startsWith('/projects')) return 'projects';
     return 'projects';
@@ -233,18 +237,23 @@ function Shell({ children }: { children: React.ReactNode }) {
                     onSelect={setViewedStage}
                   />
                 ))}
-                {/* 本 change 范围外：置灰预告 */}
-                <div className="side-stage locked">
+                <button
+                  className={`side-stage clickable ${viewedStage?.kind === 'book-export' ? 'viewed' : ''}`}
+                  aria-current={viewedStage?.kind === 'book-export' ? 'page' : undefined}
+                  onClick={() => setViewedStage({ kind: 'book-export' })}
+                >
                   <span className="dot" />
-                  <div className="st-text">
-                    <div className="st-key">beats → prose</div>
-                    <div className="st-name">细纲 · 正文，即将开放</div>
-                  </div>
-                </div>
+                  <span className="st-text">
+                    <span className="st-name">导出书本</span>
+                  </span>
+                </button>
               </div>
             </div>
           )}
           <div className="bottom">
+            <NavItem to="/settings" active={selected === 'settings'} label="API Key 设置">
+              {navIcon.refresh}
+            </NavItem>
             <NavItem to="/health" active={selected === 'health'} label="诊断">
               {navIcon.refresh}
             </NavItem>
@@ -279,6 +288,7 @@ export default function App() {
     <Shell>
       <Routes>
         <Route path="/" element={<ProjectListPage />} />
+        <Route path="/settings" element={<ApiKeySettingsPage />} />
         <Route path="/new" element={<NewProjectPage />} />
         <Route path="/projects/:id" element={<ProjectWorkspacePage />} />
         <Route

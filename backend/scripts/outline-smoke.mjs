@@ -22,6 +22,7 @@ if (!process.env.DEEPSEEK_API_KEY) {
 const directory = mkdtempSync(join(tmpdir(), 'rill-outline-real-'));
 process.env.DATABASE_URL = `file:${join(directory, 'test.db')}`;
 process.env.CHECKPOINT_DB = join(directory, 'checkpoint.db');
+process.env.PROSE_OUTPUT_DIR = join(directory, 'output');
 let app;
 let step = 'prepare';
 try {
@@ -123,14 +124,15 @@ try {
   });
   detail = await outline.get(id);
   step = 'final-confirm';
-  try {
-    await pipeline.confirm(id, 'confirm', { target: 'outline', expectedRevision: detail.revision });
-  } catch (error) {
-    if (!String(error.message).includes('阶段 beats 的生成能力尚未实现')) throw error;
-  }
+  await pipeline.confirm(id, 'confirm', { target: 'outline', expectedRevision: detail.revision });
   detail = await outline.get(id);
   const saved = await prisma.project.findUniqueOrThrow({ where: { id } });
-  if (detail.step !== 'confirmed' || detail.chapters.length !== 8) throw new Error('assertion');
+  if (
+    detail.step !== 'confirmed' ||
+    detail.chapters.length !== detail.targetChapters ||
+    saved.currentStage !== 'prose'
+  )
+    throw new Error('assertion');
   console.log(
     JSON.stringify({
       success: true,

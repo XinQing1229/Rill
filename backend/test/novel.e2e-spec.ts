@@ -60,7 +60,7 @@ describe('创作流水线 API (e2e)', () => {
       .get('/api/novel/questionnaire?genre=xuanhuan')
       .expect(200);
 
-    expect(response.body.version).toBe('v1');
+    expect(response.body.version).toBe('v3');
     expect(
       response.body.questions.some((q: { key: string }) => q.key === 'extras.goldenFinger'),
     ).toBe(true);
@@ -92,6 +92,110 @@ describe('创作流水线 API (e2e)', () => {
 
     expect(got.body.currentStage).toBe('premise');
     expect(got.body.premise.status).toBe('pending');
+  });
+
+  it('创建默认文风、保存问卷版本并剔除关系项，其他选答保留', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({
+        title: '默认文风',
+        answers: { ...answers, extras: { relation: '青梅竹马', characterScale: 'compact' } },
+      })
+      .expect(201);
+    const stored = await prisma.project.findUniqueOrThrow({ where: { id: created.body.id } });
+    expect(stored.questionnaireVersion).toBe('v3');
+    expect(JSON.parse(stored.answers)).toMatchObject({
+      writingStyle: { id: 'short-satisfying', version: 'v1' },
+      extras: { characterScale: 'compact' },
+    });
+    expect(JSON.parse(stored.answers).extras.relation).toBeUndefined();
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${stored.id}/generate`)
+      .send({ wait: true })
+      .expect(201);
+    expect(completeStructured.mock.calls.at(-1)?.[1][0].content).toContain('短篇爽文 v1');
+  });
+
+  it('非法文风 ID、版本及客户端规则被拒绝', async () => {
+    for (const writingStyle of [
+      { id: 'other', version: 'v1' },
+      { id: 'short-satisfying', version: 'v2' },
+      { id: 'short-satisfying', version: 'v1', rules: '改规则' },
+    ]) {
+      await request(app.getHttpServer())
+        .post('/api/novel/projects')
+        .send({ title: '非法文风', answers: { ...answers, writingStyle } })
+        .expect(400);
+    }
+  });
+
+  it('旧项目继续生成不补文风，并遵守旧关系约束', async () => {
+    const legacy = await prisma.project.create({
+      data: {
+        title: '旧版关系',
+        genre: 'yanqing',
+        length: 'short',
+        currentStage: 'premise',
+        answers: JSON.stringify({
+          ...answers,
+          genre: 'yanqing',
+          extras: { relation: '契约搭档逐渐相爱' },
+        }),
+        premise: { create: { data: '{}', status: 'pending' } },
+      },
+    });
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${legacy.id}/generate`)
+      .send({ wait: true })
+      .expect(201);
+    const prompt = completeStructured.mock.calls.at(-1)?.[1][0].content;
+    expect(prompt).not.toContain('短篇爽文 v1');
+    expect(prompt).toContain('契约搭档逐渐相爱');
+    const stored = await prisma.project.findUniqueOrThrow({ where: { id: legacy.id } });
+    expect(JSON.parse(stored.answers).writingStyle).toBeUndefined();
+    expect(stored.questionnaireVersion).toBe('v1');
+  });
+
+  it('故事想法可独立创建，正式生成成功后同步书名，失败保留旧书名', async () => {
+    const idea = '男大学生在股市做短线，从一万元到一亿元';
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({
+        answers: {
+          genre: 'dushi',
+          length: 'short',
+          pov: '第一人称',
+          idea,
+          tone: '热血',
+          extras: { profession: '商战', characterScale: 'compact' },
+        },
+      })
+      .expect(201);
+    const id = created.body.id;
+    expect(created.body.title).toBe('未命名作品');
+    expect(created.body.titleSource).toBe('placeholder');
+    const stored = await prisma.project.findUniqueOrThrow({ where: { id } });
+    expect(JSON.parse(stored.answers)).toEqual(
+      expect.objectContaining({ idea, extras: { characterScale: 'compact' } }),
+    );
+    expect(JSON.parse(stored.answers)).not.toHaveProperty('tone');
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/generate`)
+      .send({ wait: true })
+      .expect(201);
+    const generated = await prisma.project.findUniqueOrThrow({ where: { id } });
+    expect(generated.title).toBe(premise.title);
+    expect(generated.titleSource).toBe('generated');
+    const prompt = completeStructured.mock.calls.at(-1)?.[1][0].content;
+    expect(prompt).toContain(idea);
+    expect(prompt).not.toContain('未命名作品');
+    expect(prompt).not.toContain('阅读体验：');
+    completeStructured.mockRejectedValueOnce(new Error('模拟生成失败'));
+    await request(app.getHttpServer())
+      .post(`/api/novel/projects/${id}/generate`)
+      .send({ wait: true, force: true })
+      .expect(500);
+    expect((await prisma.project.findUniqueOrThrow({ where: { id } })).title).toBe(premise.title);
   });
 
   it('必答项缺失时创建被拒绝', async () => {

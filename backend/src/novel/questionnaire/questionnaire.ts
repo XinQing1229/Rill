@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   LENGTHS,
   LENGTH_LABELS,
@@ -6,33 +6,20 @@ import {
   QUESTIONNAIRE_VERSION,
   QuestionnaireAnswers,
   REQUIRED_ANSWER_FIELDS,
-  TONES,
+  WRITING_STYLES,
+  WRITING_STYLE_LABELS,
+  type Question,
+  type QuestionnaireDefinition,
 } from '@rill/shared';
 import { profileFor } from '../genre/genre-profile.js';
 
-export interface QuestionOption {
-  value: string;
-  label: string;
-}
-
-export interface Question {
-  key: keyof QuestionnaireAnswers | string;
-  label: string;
-  required: boolean;
-  options: QuestionOption[];
-}
-
-export interface QuestionnaireDefinition {
-  version: string;
-  questions: Question[];
-}
+export type { Question, QuestionOption, QuestionnaireDefinition } from '@rill/shared';
 
 export class MissingRequiredAnswersError extends Error {
   constructor(readonly missing: string[]) {
     const labels: Record<string, string> = {
       genre: '类型',
       length: '篇幅',
-      tone: '基调',
       pov: '叙事视角',
     };
     super(`还需填写：${missing.map((field) => labels[field] ?? field).join('、')}`);
@@ -42,7 +29,7 @@ export class MissingRequiredAnswersError extends Error {
 
 @Injectable()
 export class QuestionnaireService {
-  /** 问卷结构：必答 4 项 + 选答 + 类型级联项 */
+  /** 问卷结构：必答 3 项 + 选答 + 类型级联项 */
   build(genre: QuestionnaireAnswers['genre']): QuestionnaireDefinition {
     const profile = profileFor(genre);
 
@@ -55,18 +42,19 @@ export class QuestionnaireService {
         options: LENGTHS.map((length) => ({ value: length, label: LENGTH_LABELS[length] })),
       },
       {
-        key: 'tone',
-        label: '基调',
-        required: true,
-        options: TONES.map((tone) => ({ value: tone, label: tone })),
-      },
-      {
         key: 'pov',
         label: '叙事视角',
         required: true,
         options: POVS.map((pov) => ({ value: pov, label: pov })),
       },
     ];
+
+    questions.push({
+      key: 'writingStyle',
+      label: '文风',
+      required: false,
+      options: WRITING_STYLES.map((id) => ({ value: id, label: WRITING_STYLE_LABELS[id] })),
+    });
 
     // 选答：人物数量（默认按篇幅配置，可在此覆盖）
     questions.push({
@@ -87,6 +75,7 @@ export class QuestionnaireService {
         label: extra.label,
         required: false,
         options: extra.options.map((option) => ({ value: option, label: option })),
+        ...(extra.allowCustom ? { allowCustom: true } : {}),
       });
     }
 
@@ -97,10 +86,11 @@ export class QuestionnaireService {
   validate(answers: Partial<QuestionnaireAnswers>): void {
     const missing = REQUIRED_ANSWER_FIELDS.filter((field) => {
       const value = answers[field];
-      return value === undefined || value === null || value === '';
+      return value === undefined || value === null || value.trim() === '';
     });
     if (missing.length > 0) {
       throw new MissingRequiredAnswersError([...missing]);
     }
+    if (answers.length !== 'short') throw new BadRequestException('当前仅支持短篇小说');
   }
 }

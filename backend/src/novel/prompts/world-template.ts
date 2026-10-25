@@ -3,9 +3,9 @@ import { PromptTemplate } from '../../ai/prompts/prompt.registry.js';
 /**
  * 世界观阶段模板。稳定前缀在前，上游产物与档位要求作为变量注入。
  */
-export const worldV1: PromptTemplate = {
+export const worldV2: PromptTemplate = {
   name: 'world',
-  version: 'v1',
+  version: 'v2',
   requiredVariables: ['upstream', 'genre', 'genreTraits', 'tier', 'tone'],
   render(variables: Record<string, string>): string {
     const tierInstruction =
@@ -19,6 +19,7 @@ export const worldV1: PromptTemplate = {
       '每条描述不超过 60 字，力量体系等自定义块同样保持精炼。宁缺毋滥。';
 
     return [
+      variables.writingStyle ?? '',
       '你是一位资深的世界观设计师，为小说搭建自洽且有戏剧张力的世界。',
       '请始终使用简体中文，内容具体、可落地，避免空泛的口号式描述。',
       '重要：时代与地点已由种子确定，你不要输出它们，也不要与之矛盾。',
@@ -29,7 +30,7 @@ export const worldV1: PromptTemplate = {
       '',
       `类型：${variables.genre}`,
       `类型特征：${variables.genreTraits}`,
-      `基调：${variables.tone}`,
+      `阅读体验：${variables.tone}`,
       '',
       `产出要求：${tierInstruction}`,
       budgetInstruction,
@@ -37,4 +38,19 @@ export const worldV1: PromptTemplate = {
       '请输出这个世界的设定。',
     ].join('\n');
   },
+};
+
+export const worldV3: PromptTemplate = {
+  ...worldV2,
+  version: 'v3',
+  requiredVariables: worldV2.requiredVariables.filter((key) => key !== 'tone'),
+  render: (v) =>
+    [
+      worldV2
+        .render({ ...v, tone: v.tone ?? '' })
+        .replace(`阅读体验：${v.tone ?? ''}\n`, v.tone ? `作者历史阅读体验：${v.tone}\n` : ''),
+      v.profession ? `作者历史职业约束：${JSON.stringify(v.profession)}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
 };

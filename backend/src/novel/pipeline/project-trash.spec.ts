@@ -2,7 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { QuestionnaireAnswers } from '@rill/shared';
 
-import { execSync } from 'node:child_process';
+import { copyFileSync } from 'node:fs';
 import fs from 'node:fs';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
@@ -39,18 +39,22 @@ function fakeGenerator(stage: 'premise', impl?: () => Promise<void>): StageGener
 /** 构造一个 checkpoint 快照，用于验证永久删除时流水线快照被清理 */
 async function putCheckpoint(file: string, threadId: string): Promise<void> {
   const saver = createCheckpointer(file);
-  await saver.put(
-    { configurable: { thread_id: threadId } },
-    {
-      v: 1,
-      id: 'cp-1',
-      ts: new Date().toISOString(),
-      channel_values: { currentStage: 'premise' },
-      channel_versions: { currentStage: 1 },
-      versions_seen: {},
-    },
-    { source: 'loop', step: 1, parents: {} },
-  );
+  try {
+    await saver.put(
+      { configurable: { thread_id: threadId } },
+      {
+        v: 1,
+        id: 'cp-1',
+        ts: new Date().toISOString(),
+        channel_values: { currentStage: 'premise' },
+        channel_versions: { currentStage: 1 },
+        versions_seen: {},
+      },
+      { source: 'loop', step: 1, parents: {} },
+    );
+  } finally {
+    saver.db.close();
+  }
 }
 
 describe('项目软删除与回收站', () => {
@@ -61,12 +65,11 @@ describe('项目软删除与回收站', () => {
   let checkpointDir: string;
 
   beforeAll(async () => {
-    // 独立库需要自行应用迁移（globalSetup 只准备共享的 pipeline-test.db）
-    execSync('./node_modules/.bin/prisma migrate deploy', {
-      cwd: join(dirname(fileURLToPath(import.meta.url)), '../../..'),
-      env: { ...process.env },
-      stdio: 'ignore',
-    });
+    // 从 globalSetup 已迁移的库复制独立副本，避免与其他套件互相清理数据。
+    copyFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../../pipeline-test.db'),
+      dbFile,
+    );
     prisma = new PrismaService();
     await prisma.$connect();
   });
@@ -105,6 +108,7 @@ describe('项目软删除与回收站', () => {
   });
 
   afterEach(() => {
+    service.onModuleDestroy();
     fs.rmSync(checkpointDir, { recursive: true, force: true });
   });
 
@@ -267,11 +271,12 @@ describe('项目软删除与回收站', () => {
     expect(await prisma.stageRun.count({ where: { projectId: project.id } })).toBe(0);
     // OutlineUsage 没有外键级联，必须被显式清理
     expect(await prisma.outlineUsage.count({ where: { projectId: project.id } })).toBe(0);
-    expect(
-      await createCheckpointer(checkpointFile).getTuple({
-        configurable: { thread_id: project.id },
-      }),
-    ).toBeUndefined();
+    const saver = createCheckpointer(checkpointFile);
+    try {
+      expect(await saver.getTuple({ configurable: { thread_id: project.id } })).toBeUndefined();
+    } finally {
+      saver.db.close();
+    }
   });
 
   it('未删除的项目不允许永久删除', async () => {
