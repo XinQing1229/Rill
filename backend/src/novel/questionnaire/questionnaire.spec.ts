@@ -61,6 +61,29 @@ describe('QuestionnaireService', () => {
     expect(xuanyi.questions.some((q) => q.key === 'extras.caseScale')).toBe(true);
   });
 
+  it('组合问卷合并级联问题且必答项不重复', () => {
+    const { questions } = service.build(['xuanhuan', 'xuanyi']);
+    expect(questions.map((question) => question.key)).toEqual(
+      expect.arrayContaining(['extras.goldenFinger', 'extras.caseScale']),
+    );
+    expect(questions.filter((question) => question.key === 'pov')).toHaveLength(1);
+  });
+
+  it('多选契约拒绝空数组、重复项和未知类型，并兼容单选', () => {
+    const answers = { length: 'short', pov: '第一人称' };
+    for (const genre of [[], ['dushi', 'dushi'], ['unknown']]) {
+      expect(CreateProjectSchema.safeParse({ answers: { ...answers, genre } }).success).toBe(false);
+    }
+    expect(() => service.validate({ ...answers, length: 'short', genre: [] })).toThrow(
+      MissingRequiredAnswersError,
+    );
+    expect(
+      CreateProjectSchema.parse({ answers: { ...answers, genre: ['dushi', 'chaogu'] } }).answers
+        .genre,
+    ).toEqual(['dushi', 'chaogu']);
+    expect(QuestionnaireAnswersSchema.parse({ ...answers, genre: 'dushi' }).genre).toBe('dushi');
+  });
+
   it('问卷带版本号', () => {
     expect(service.build('dushi').version).toBe('v3');
   });
@@ -73,6 +96,10 @@ describe('QuestionnaireService', () => {
       'dushi',
       'lishi',
       'kehuan',
+      'xianxia',
+      'chaogu',
+      'chuanyue',
+      'cthulhu',
       'other',
     ] as const) {
       const questions = service.build(genre).questions;

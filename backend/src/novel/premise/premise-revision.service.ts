@@ -119,7 +119,7 @@ export class PremiseRevisionService {
           this.llm.completeStructured<RevisedPremiseOutput>(
             RevisedPremiseOutputSchema,
             [{ role: 'user', content: prompt }],
-            { traceId, usage: 'draft', signal: controller.signal },
+            { traceId, signal: controller.signal },
           ),
           new Promise<never>((_, reject) => {
             timer = setTimeout(() => {

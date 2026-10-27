@@ -55,31 +55,56 @@ export class LlmController {
 
   @Post('ping')
   async ping(): Promise<PingResponse> {
-    // 走 draft 用途并贯穿 traceId，使该端点同时验证基建链路本身
+    // 测试连接应在有限时间内结束，避免界面一直处于加载状态。
     const traceId = newTraceId();
-
-    if (!this.llmService.hasApiKey()) {
-      this.logger.warn(`traceId=${traceId} LLM 未配置`);
-      throw new ServiceUnavailableException('LLM 未配置：请在“API Key 设置”页面配置密钥');
-    }
+    const timeoutMs = 20_000;
+    const controller = new AbortController();
+    let timeout: NodeJS.Timeout | undefined;
 
     try {
-      const result = await this.llmService.complete(
-        [{ role: 'user', content: '请回复两个字：收到' }],
-        { usage: 'draft', traceId, maxTokens: 256 },
-      );
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`模型连接测试超时（${timeoutMs / 1000} 秒）`));
+        }, timeoutMs);
+      });
+      const result = await Promise.race([
+        this.llmService.complete([{ role: 'user', content: '请回复两个字：收到' }], {
+          traceId,
+          maxTokens: 256,
+          signal: controller.signal,
+        }),
+        timeoutPromise,
+      ]);
       return { ok: true, model: result.model, content: result.content };
     } catch (error) {
-      // 只透传失败原因，绝不在日志或响应中暴露 API key
+      // 只回传分类后的失败原因，绝不暴露 API key 或供应商原始响应正文。
       const status = extractStatus(error);
+      if (error instanceof ServiceUnavailableException) throw error;
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : '';
+      const timedOut =
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('timed out') ||
+        errorMessage.includes('超时') ||
+        errorMessage.includes('aborted');
       const reason =
         status === 401 || status === 403
-          ? '认证失败，请检查 API Key'
+          ? '认证失败，请检查当前服务商的 API Key'
           : status === 429
-            ? '请求过于频繁，请稍后重试'
-            : '模型服务暂不可用，请检查配置后重试';
-      this.logger.error(`traceId=${traceId} LLM 调用失败: ${reason}`);
+            ? '请求过于频繁或额度不足，请检查账号额度后重试'
+            : status === 400 || status === 404
+              ? `模型服务拒绝了请求（HTTP ${status}），请检查模型名和请求配置`
+              : timedOut
+                ? `连接模型服务超时（${timeoutMs / 1000} 秒），请检查网络或稍后重试`
+                : status && status >= 500
+                  ? `模型服务暂时异常（HTTP ${status}），请稍后重试`
+                  : '无法连接模型服务，请检查网络、服务地址和 API Key';
+      this.logger.error(
+        `traceId=${traceId} LLM 调用失败 status=${status ?? 'unknown'} reason=${reason}`,
+      );
       throw new BadGatewayException(`LLM 调用失败: ${reason}`);
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
   }
 }

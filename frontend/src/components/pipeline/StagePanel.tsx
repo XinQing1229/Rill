@@ -1,3 +1,4 @@
+import { GlobalOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { PremiseRevisionCard } from '../premise/PremiseRevisionCard';
 import { ProseWorkbench } from '../prose/ProseWorkbench';
@@ -176,23 +177,76 @@ export function StagePanel({
     if (stage === 'relations') {
       const nameOf = (cid: string) =>
         project.characters.find((row) => row.id === cid)?.name ?? '（已删除人物）';
-      return (
-        <div>
-          <div className="block-title">
-            <h3>关系网</h3>
-            <span className="meta">{project.relations.length} 条 · 依赖人物产物</span>
-          </div>
-          <RelationList relations={project.relations} nameOf={nameOf} />
-        </div>
-      );
+      return <RelationList relations={project.relations} nameOf={nameOf} />;
     }
     return null;
   };
 
+  const stageActions = (
+    <div className="pv-stage-actions">
+      {isCurrent &&
+        !stale &&
+        (project.mode === 'manual' ||
+          (stage === 'premise' && project.stageStates?.premise?.confirmedAt === null)) && (
+          <Button type="primary" disabled={busy} onClick={onConfirm}>
+            确认并推进
+          </Button>
+        )}
+      <Popconfirm
+        title="重新生成将覆盖已有产物"
+        description="其后阶段的产物也会标记为失效，确定继续？"
+        okText="重新生成"
+        cancelText="取消"
+        disabled={busy}
+        onConfirm={() => onGenerate(true)}
+      >
+        <Button size="small" disabled={busy}>
+          重新生成
+        </Button>
+      </Popconfirm>
+      {!isCurrent && (
+        <Popconfirm
+          title={`回退到「${STAGE_LABELS[stage]}」`}
+          description="其后的阶段产物将被标记为失效，需要重新生成。确定回退？"
+          okText="回退"
+          cancelText="取消"
+          disabled={busy}
+          onConfirm={() => onRollback(stage)}
+        >
+          <Button size="small" disabled={busy}>
+            回退到此阶段
+          </Button>
+        </Popconfirm>
+      )}
+    </div>
+  );
+
   return (
-    <div className="node">
+    <div
+      className={
+        stage === 'premise'
+          ? 'node premise-stage'
+          : stage === 'world'
+            ? `node world-stage${status === 'done' && !stale ? ' world-stage-ready' : ''}`
+            : stage === 'characters'
+              ? 'node character-stage'
+              : 'node'
+      }
+    >
       <header>
         <h2>
+          {stage === 'premise' && (
+            <svg className="pv-seed-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M27 4C15 4 7 7 7 16c0 5 4 8 9 6 7-3 9-10 11-18Z" fill="currentColor" />
+              <path d="M3 28 21 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="m9 22 12-11" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          )}
+          {stage === 'world' && (
+            <span className="wv-icon" aria-hidden="true">
+              <GlobalOutlined />
+            </span>
+          )}
           {STAGE_LABELS[stage]}
           {stage === 'characters' && project.characters.length > 0 && (
             <span className="num" style={{ fontWeight: 400, color: 'var(--faint)' }}>
@@ -290,49 +344,16 @@ export function StagePanel({
       {status === 'done' && (
         <>
           {renderArtifact()}
-          <div className="block-title" style={{ marginTop: 20 }}>
-            <span style={{ fontSize: 'var(--fs-small)', color: 'var(--muted)', fontWeight: 400 }}>
-              阶段操作
-            </span>
-            <span style={{ flex: 1 }} />
-            {isCurrent &&
-              !stale &&
-              (project.mode === 'manual' ||
-                (stage === 'premise' && project.stageStates?.premise?.confirmedAt === null)) && (
-                <Button type="primary" disabled={busy} onClick={onConfirm}>
-                  确认并推进
-                </Button>
-              )}
-            <Popconfirm
-              title="重新生成将覆盖已有产物"
-              description="其后阶段的产物也会标记为失效，确定继续？"
-              okText="重新生成"
-              cancelText="取消"
-              disabled={busy}
-              onConfirm={() => onGenerate(true)}
-            >
-              <Button size="small" disabled={busy}>
-                重新生成
-              </Button>
-            </Popconfirm>
-            {!isCurrent && (
-              <Popconfirm
-                title={`回退到「${STAGE_LABELS[stage]}」`}
-                description="其后的阶段产物将被标记为失效，需要重新生成。确定回退？"
-                okText="回退"
-                cancelText="取消"
-                disabled={busy}
-                onConfirm={() => onRollback(stage)}
-              >
-                <Button size="small" disabled={busy}>
-                  回退到此阶段
-                </Button>
-              </Popconfirm>
-            )}
-          </div>
+          {(stage !== 'premise' || stale) && (
+            <div className="block-title" style={{ marginTop: 20 }}>
+              <span className="hint">阶段操作</span>
+              {stageActions}
+            </div>
+          )}
           {stage === 'premise' && !stale && (
             <PremiseRevisionCard
               key={project.id}
+              actions={stageActions}
               project={project}
               busy={parentBusy || project.status === 'running'}
               onBusyChange={revisionBusyChanged}

@@ -75,6 +75,48 @@ describe('项目回收站 API (e2e)', () => {
     expect(await idsOf('?scope=trash')).not.toContain(id);
   });
 
+  it('发布状态接口校验请求，支持保存和改回，并在列表及详情中持久化', async () => {
+    const id = await createProject('人工发布作品');
+    const endpoint = `/api/novel/projects/${id}/publication-status`;
+    const original = await request(app.getHttpServer())
+      .get(`/api/novel/projects/${id}`)
+      .expect(200);
+    expect(original.body.publicationStatus).toBe('writing');
+    for (const body of [
+      {},
+      { publicationStatus: 'done' },
+      { publicationStatus: null },
+      { publicationStatus: 'published', status: 'done' },
+    ]) {
+      await request(app.getHttpServer()).patch(endpoint).send(body).expect(400);
+    }
+    await request(app.getHttpServer())
+      .patch(endpoint)
+      .send({ publicationStatus: 'published' })
+      .expect(200, { publicationStatus: 'published' });
+    const detail = await request(app.getHttpServer()).get(`/api/novel/projects/${id}`).expect(200);
+    expect(detail.body).toMatchObject({
+      publicationStatus: 'published',
+      status: original.body.status,
+      currentStage: original.body.currentStage,
+    });
+    const list = await request(app.getHttpServer()).get('/api/novel/projects').expect(200);
+    expect(list.body.find((p: { id: string }) => p.id === id).publicationStatus).toBe('published');
+    await request(app.getHttpServer())
+      .patch(endpoint)
+      .send({ publicationStatus: 'writing' })
+      .expect(200, { publicationStatus: 'writing' });
+    await request(app.getHttpServer()).delete(`/api/novel/projects/${id}`).expect(200);
+    await request(app.getHttpServer())
+      .patch(endpoint)
+      .send({ publicationStatus: 'published' })
+      .expect(404);
+    await request(app.getHttpServer())
+      .patch('/api/novel/projects/missing/publication-status')
+      .send({ publicationStatus: 'published' })
+      .expect(404);
+  });
+
   it('重复软删除返回 404', async () => {
     const id = await createProject('重复删除作品');
     await request(app.getHttpServer()).delete(`/api/novel/projects/${id}`).expect(200);

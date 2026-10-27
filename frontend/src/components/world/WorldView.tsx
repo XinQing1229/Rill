@@ -1,4 +1,13 @@
-import type { Genre } from '@rill/shared';
+import type { ReactNode } from 'react';
+import {
+  ApartmentOutlined,
+  EnvironmentOutlined,
+  FieldTimeOutlined,
+  FileTextOutlined,
+  QuestionCircleOutlined,
+} from '@ant-design/icons';
+import './WorldView.css';
+import { selectedGenres, type Genre, type GenreSelection } from '@rill/shared';
 
 /** 类型自定义块的渲染注册表：键与 shared 的 CUSTOM_WORLD_SCHEMAS 对齐 */
 type WorldData = Record<string, unknown>;
@@ -159,7 +168,7 @@ const CUSTOM_BLOCKS: Partial<Record<Genre, (props: BlockProps) => React.ReactNod
 interface Props {
   /** 已按 worldSchemaFor(genre) 校验的世界观数据 */
   world: WorldData;
-  genre: Genre;
+  genre: GenreSelection;
   premiseSetting?: { era: string; place: string };
 }
 
@@ -172,23 +181,18 @@ export function WorldView({ world, genre, premiseSetting }: Props) {
   const history = world.history as Array<{ event: string; impact: string }> | undefined;
   const secrets = world.secrets as Array<{ secret: string; relatedTo: string }> | undefined;
 
-  const customRenderer = CUSTOM_BLOCKS[genre];
+  const customGenres = selectedGenres(genre).filter((item) => CUSTOM_BLOCKS[item]);
 
   return (
-    <div>
-      <dl className="kv">
+    <div className="world-view">
+      <dl className="kv wv-overview">
         <dt>世界概要</dt>
         <dd>{world.summary as string}</dd>
         {premiseSetting && (
           <>
             <dt>
               时代 / 地点
-              <span
-                className="mono"
-                style={{ display: 'block', fontSize: 11, color: 'var(--faint)' }}
-              >
-                继承自种子
-              </span>
+              <span className="wv-inherited">继承自种子</span>
             </dt>
             <dd>
               {premiseSetting.era} · {premiseSetting.place}
@@ -197,92 +201,102 @@ export function WorldView({ world, genre, premiseSetting }: Props) {
         )}
       </dl>
 
-      <div className="block-title">
-        <h3>世界规则</h3>
-        <span className="meta">{rules.length} 条</span>
-      </div>
-      <div>
-        {rules.map((rule) => (
-          <div key={rule.name} className="block-item">
-            <b>{rule.name}</b>
-            <span>{rule.description}</span>
-          </div>
-        ))}
-      </div>
+      <WorldSection title="世界规则" meta={`${rules.length} 条`} icon={<FileTextOutlined />}>
+        <WorldRows
+          items={rules.map((rule) => ({ title: rule.name, description: rule.description }))}
+        />
+      </WorldSection>
 
-      <div className="block-title">
-        <h3>势力</h3>
-        <span className="meta">{factions.length} 方</span>
-      </div>
-      <div>
-        {factions.map((faction) => (
-          <div key={faction.name} className="block-item">
-            <b>{faction.name}</b>
-            <span>
-              {faction.nature} · {faction.stance}
-            </span>
-          </div>
-        ))}
-      </div>
+      <WorldSection title="势力" meta={`${factions.length} 方`} icon={<ApartmentOutlined />}>
+        <WorldRows
+          items={factions.map((faction) => ({
+            title: faction.name,
+            description: `${faction.nature} · ${faction.stance}`,
+          }))}
+        />
+      </WorldSection>
 
       {geography && geography.length > 0 && (
-        <>
-          <div className="block-title">
-            <h3>地理</h3>
-            <span className="meta">详细档</span>
-          </div>
-          <div>
-            {geography.map((item) => (
-              <div key={item.name} className="block-item">
-                <b>{item.name}</b>
-                <span>{item.description}</span>
-              </div>
-            ))}
-          </div>
-        </>
+        <WorldSection title="地理" meta="详细档" icon={<EnvironmentOutlined />} tone="amber">
+          <WorldRows
+            items={geography.map((item) => ({ title: item.name, description: item.description }))}
+          />
+        </WorldSection>
       )}
-
       {history && history.length > 0 && (
-        <>
-          <div className="block-title">
-            <h3>历史</h3>
-            <span className="meta">详细档</span>
-          </div>
-          <div>
-            {history.map((item) => (
-              <div key={item.event} className="block-item">
-                <b>{item.event}</b>
-                <span>{item.impact}</span>
-              </div>
-            ))}
-          </div>
-        </>
+        <WorldSection title="历史" meta="详细档" icon={<FieldTimeOutlined />}>
+          <WorldRows
+            items={history.map((item) => ({ title: item.event, description: item.impact }))}
+          />
+        </WorldSection>
       )}
-
       {secrets && secrets.length > 0 && (
-        <>
-          <div className="block-title">
-            <h3>未解之谜</h3>
-            <span className="meta">伏笔素材</span>
-          </div>
-          <div>
-            {secrets.map((item) => (
-              <div key={item.secret} className="block-item">
-                <b>{item.secret}</b>
-                <span>{item.relatedTo}</span>
-              </div>
-            ))}
-          </div>
-        </>
+        <WorldSection title="未解之谜" meta="伏笔素材" icon={<QuestionCircleOutlined />}>
+          <WorldRows
+            items={secrets.map((item) => ({ title: item.secret, description: item.relatedTo }))}
+          />
+        </WorldSection>
       )}
 
-      {customRenderer ? (
-        customRenderer({ data: world, genre })
+      {customGenres.length ? (
+        customGenres.map((item) => {
+          const Renderer = CUSTOM_BLOCKS[item]!;
+          return (
+            <section className="wv-card wv-custom" key={item}>
+              <Renderer data={world} genre={item} />
+            </section>
+          );
+        })
       ) : (
-        <div className="hint" style={{ marginTop: 16 }}>
-          该类型没有自定义世界观块
-        </div>
+        <div className="hint wv-empty">该类型没有自定义世界观块</div>
       )}
     </div>
+  );
+}
+
+function WorldSection({
+  title,
+  meta,
+  icon,
+  tone,
+  children,
+}: {
+  title: string;
+  meta: string;
+  icon: ReactNode;
+  tone?: 'amber';
+  children: ReactNode;
+}) {
+  return (
+    <section className="wv-card" aria-label={title}>
+      <div className="wv-card-heading">
+        <span className={`wv-icon${tone ? ` wv-icon-${tone}` : ''}`} aria-hidden="true">
+          {icon}
+        </span>
+        <h3>{title}</h3>
+        <span className="wv-meta">{meta}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function WorldRows({ items }: { items: Array<{ title: string; description: string }> }) {
+  return items.length ? (
+    <ol className="wv-rows">
+      {items.map((item, index) => (
+        <li key={`${index}-${item.title}`} className="wv-row">
+          <span className="wv-number" aria-hidden="true">
+            {index + 1}
+          </span>
+          <div className="wv-row-content">
+            <strong>{item.title}</strong>
+            <span>{item.description}</span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  ) : (
+    <p className="hint wv-empty">暂无内容</p>
   );
 }

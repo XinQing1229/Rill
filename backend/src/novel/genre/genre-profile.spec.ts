@@ -1,4 +1,4 @@
-import { Genre, StoryLength } from '@rill/shared';
+import { Genre, StoryLength, worldSchemaFor } from '@rill/shared';
 import { GENRE_PROFILES, profileFor, stagesFor } from './genre-profile.js';
 
 describe('genre profile', () => {
@@ -29,6 +29,41 @@ describe('genre profile', () => {
     expect(stagesFor('dushi')).not.toContain('world');
     expect(stagesFor('yanqing')).not.toContain('world');
     expect(stagesFor('xuanhuan')).toContain('world');
+  });
+
+  it('新类型与旧其他类型均可继续生成，世界观阶段符合类型配置', () => {
+    expect(stagesFor('xianxia')).toContain('world');
+    expect(stagesFor('chuanyue')).toContain('world');
+    expect(stagesFor('cthulhu')).toContain('world');
+    expect(profileFor('cthulhu').worldWeight).toBe('detailed');
+    expect(stagesFor('chaogu')).not.toContain('world');
+    expect(stagesFor('other')).toContain('prose');
+  });
+
+  it('组合类型阶段取并集，与选择顺序无关，创作特征与问卷合并', () => {
+    expect(stagesFor(['dushi', 'chaogu'])).not.toContain('world');
+    expect(stagesFor(['dushi', 'chuanyue'])).toContain('world');
+    expect(stagesFor(['chuanyue', 'dushi'])).toEqual(stagesFor(['dushi', 'chuanyue']));
+    const profile = profileFor(['xuanhuan', 'xuanyi']);
+    expect(profile.label).toBe('玄幻、悬疑');
+    expect(profile.worldWeight).toBe('detailed');
+    expect(profile.traits).toEqual(
+      expect.arrayContaining([...profileFor('xuanhuan').traits, ...profileFor('xuanyi').traits]),
+    );
+    expect(profile.extraQuestions.map((question) => question.key)).toEqual([
+      'goldenFinger',
+      'powerSystem',
+      'caseScale',
+      'puzzleStyle',
+    ]);
+    expect(stagesFor('["dushi","chuanyue"]')).toEqual(stagesFor(['dushi', 'chuanyue']));
+  });
+
+  it('世界观合并所有已选类型的结构，不丢失自定义块', () => {
+    const schema = worldSchemaFor(['xuanhuan', 'kehuan']);
+    expect(schema.shape).toHaveProperty('powerSystem');
+    expect(schema.shape).toHaveProperty('techTree');
+    expect(schema.shape).toHaveProperty('summary');
   });
 
   it('世界观详略随类型不同', () => {

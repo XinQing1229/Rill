@@ -49,7 +49,12 @@ export function classifyError(error: unknown): ErrorKind {
 
   const message = error instanceof Error ? error.message.toLowerCase() : '';
   if (message.includes('rate limit') || message.includes('429')) return 'rate_limit';
-  if (message.includes('timeout') || message.includes('econnreset')) return 'server';
+  if (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('econnreset')
+  )
+    return 'server';
 
   return 'unknown';
 }
@@ -67,6 +72,13 @@ export function isOutputParseError(error: unknown): boolean {
 
 /** 是否值得重试：限流与服务端错误重试，请求类错误、解析错误与预算耗尽不重试 */
 export function shouldRetry(error: unknown): boolean {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'name' in error &&
+    ['AbortError', 'APIUserAbortError'].includes(String(error.name))
+  )
+    return false;
   if (isBudgetExceeded(error)) return false;
   if (isOutputParseError(error)) return false;
   const kind = classifyError(error);

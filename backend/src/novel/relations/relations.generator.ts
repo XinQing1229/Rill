@@ -62,7 +62,7 @@ export class RelationGenerator implements StageGenerator {
     const traceId = newTraceId();
     const result = await this.llm.completeStructured<{
       relations: Array<Record<string, unknown>>;
-    }>(RelationListSchema, [{ role: 'user', content: prompt }], { traceId, usage: 'draft' });
+    }>(RelationListSchema, [{ role: 'user', content: prompt }], { traceId });
 
     const byName = new Map(characters.map((item) => [item.name, item]));
     const normalized = this.normalize(result.relations ?? [], byName);

@@ -183,25 +183,6 @@
   .shell:has([aria-label='正文工作台']) {
     display: block;
   }
-  .shell:has([aria-label='正文工作台']) > .sidebar {
-    position: static;
-    height: auto;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .shell:has([aria-label='正文工作台']) .sidebar > .group-label {
-    display: none;
-  }
-  .shell:has([aria-label='正文工作台']) .sidebar > .side-group,
-  .shell:has([aria-label='正文工作台']) .sidebar > .bottom {
-    grid-column: 1 / -1;
-    margin-top: 0;
-  }
-  .shell:has([aria-label='正文工作台']) .side-stages,
-  .shell:has([aria-label='正文工作台']) .sidebar > .bottom {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .shell:has([aria-label='正文工作台']) > .sheet {
     margin: 0;
     border-radius: 0;

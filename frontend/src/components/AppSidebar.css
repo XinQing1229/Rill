@@ -1,0 +1,194 @@
+/* 所有页面共用工作台的浅色侧栏，避免路由间样式漂移。 */
+.shell {
+  --sidebar-width: 250px;
+  background: var(--ground);
+}
+
+.shell .sidebar {
+  --side-bg: #f8f9fa;
+  --side-raised: #eef0f3;
+  --side-active: #eef0f3;
+  --side-border: #e8eaee;
+  --side-text: #292f38;
+  --side-muted: #626975;
+  --side-faint: #6b7280;
+  padding: 24px 16px 20px;
+  border-right: 1px solid var(--side-border);
+  overflow-y: auto;
+}
+
+.shell .brand {
+  height: 56px;
+  margin-bottom: 24px;
+  color: var(--side-text);
+  border-radius: 8px;
+}
+
+.shell .brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shell .brand .brand-logo {
+  display: block;
+  width: 118px;
+  height: auto;
+  max-width: 100%;
+  flex: none;
+  mix-blend-mode: multiply;
+}
+
+.shell .group-label {
+  margin: 12px 0 8px;
+  font-size: 13px;
+}
+
+.shell .nav-item {
+  height: 42px;
+  gap: 12px;
+  padding-inline: 12px;
+  border-radius: 10px;
+}
+
+.shell .side-group {
+  margin-top: 12px;
+  margin-bottom: 24px;
+}
+
+.shell .side-group > .group-label {
+  margin-top: 0;
+}
+
+.shell .side-stages {
+  gap: 5px;
+}
+
+.shell .side-stage {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  gap: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--side-text);
+  font: inherit;
+  text-align: left;
+}
+
+.shell .side-stage:hover,
+.shell .side-stage.viewed {
+  background: var(--side-raised);
+}
+
+.shell .side-stage:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shell .side-stage .st-name {
+  font-size: 14px;
+  margin: 0;
+}
+
+.stage-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
+  flex: none;
+  color: var(--side-text);
+  font-size: 18px;
+}
+
+.stage-icon svg {
+  width: 1em;
+  height: 1em;
+}
+
+.stage-icon-premise {
+  color: #26713a;
+}
+
+.stage-icon-world {
+  color: #326281;
+}
+
+.side-state {
+  background: #edf0f3;
+  color: #5b626c;
+}
+
+.side-state-done {
+  background: #ddf8e9;
+  color: #26734f;
+}
+
+.side-state-generating {
+  background: #e2f1fa;
+  color: #236287;
+}
+
+.side-state-failed {
+  background: #ffedea;
+  color: #a33230;
+}
+
+.side-state-stale {
+  background: #fff3d6;
+  color: #8c601d;
+}
+
+.shell .side-stage .pill {
+  font-size: 12px;
+  padding: 1px 9px;
+}
+
+@media (max-width: 850px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .shell .sidebar {
+    position: static;
+    height: auto;
+    padding: 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--side-border);
+  }
+
+  .shell .brand {
+    margin-bottom: 12px;
+  }
+
+  .shell .sidebar > .group-label,
+  .shell .current-model,
+  .shell .side-group > .group-label {
+    display: none;
+  }
+
+  .shell .sidebar nav {
+    display: flex;
+    gap: 8px;
+  }
+
+  .shell .side-group {
+    margin: 14px 0;
+  }
+
+  .shell .side-stages {
+    display: flex;
+    overflow-x: auto;
+    padding: 3px;
+  }
+
+  .shell .side-stage {
+    width: auto;
+    flex: none;
+  }
+
+  .shell .sidebar .bottom {
+    margin-top: 0;
+  }
+}

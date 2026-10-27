@@ -6,11 +6,12 @@ import type {
   CharacterRow,
   ConfirmAction,
   GenerateResponse,
-  Genre,
+  GenreSelection,
   PipelineMode,
   ProjectDetail,
   ProjectScope,
   ProjectSummary,
+  SetPublicationStatusBody,
   QuestionnaireAnswers,
   QuestionnaireDefinition,
   RelationRow,
@@ -25,8 +26,10 @@ type GenerateBody = z.infer<typeof GenerateBodySchema>;
 const base = '/api/novel';
 
 /** 获取问卷结构（随类型级联） */
-export function getQuestionnaire(genre: Genre): Promise<QuestionnaireDefinition> {
-  return get(`${base}/questionnaire?genre=${encodeURIComponent(genre)}`);
+export function getQuestionnaire(genre: GenreSelection): Promise<QuestionnaireDefinition> {
+  return get(
+    `${base}/questionnaire?genre=${encodeURIComponent(Array.isArray(genre) ? genre.join(',') : genre)}`,
+  );
 }
 
 /** 创建项目并返回详情（含初始 premise 行） */
@@ -37,6 +40,14 @@ export function createProject(body: CreateProjectBody): Promise<ProjectDetail> {
 /** 项目列表（scope=trash 时为回收站，按删除时间倒序） */
 export function listProjects(scope: ProjectScope = 'active'): Promise<ProjectSummary[]> {
   return get(`${base}/projects${scope === 'trash' ? '?scope=trash' : ''}`);
+}
+
+/** 人工维护发布状态，不触发平台上传或流水线推进 */
+export function setPublicationStatus(
+  id: string,
+  body: SetPublicationStatusBody,
+): Promise<SetPublicationStatusBody> {
+  return patch(`${base}/projects/${id}/publication-status`, body);
 }
 
 /** 软删除：移入回收站，产物保留可恢复 */

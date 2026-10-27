@@ -1,3 +1,5 @@
+import { useWorkspaceProject } from '../../hooks/useWorkspaceProject';
+import { coverImageUrl } from '../../api/cover';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -29,6 +31,7 @@ const statusLabels: Record<BookJob['status'], string> = {
   delete_failed: '删除失败',
 };
 export function BookExportWorkbench({ projectId }: { projectId: string }) {
+  const { project, setViewedStage } = useWorkspaceProject();
   const [settings, setSettings] = useState<BookSettings | null>(null);
   const [saved, setSaved] = useState('');
   const [preview, setPreview] = useState<BookPreview | null>(null);
@@ -136,6 +139,31 @@ export function BookExportWorkbench({ projectId }: { projectId: string }) {
       {error && <Alert role="alert" type="error" showIcon message={error} />}{' '}
       {notice && <Alert role="status" type="success" showIcon message={notice} />}
       <Card title="书籍信息">
+        <Space style={{ marginBottom: 16 }} wrap>
+          {project?.cover && (
+            <img
+              src={coverImageUrl(projectId, project.cover.assetId, true)}
+              alt="当前封面"
+              style={{ width: 48, height: 64, objectFit: 'contain' }}
+            />
+          )}
+          <Typography.Text type="secondary">
+            {project?.cover
+              ? '已设置封面，EPUB 将包含封面；TXT / Markdown 仅导出文字'
+              : '未设置封面，可继续导出'}
+          </Typography.Text>
+          <Button
+            onClick={() => {
+              if (!dirty) {
+                setViewedStage({ kind: 'cover' });
+                return;
+              }
+              setNotice('请先保存成书信息，再前往管理封面');
+            }}
+          >
+            管理封面
+          </Button>
+        </Space>
         <div className="book-fields">
           <label>
             书名（必填）

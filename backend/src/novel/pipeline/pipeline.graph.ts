@@ -9,7 +9,7 @@ import { PipelineMode, QuestionnaireAnswers, Stage } from '@rill/shared';
  */
 export const PipelineStateAnnotation = Annotation.Root({
   projectId: Annotation<string>(),
-  genre: Annotation<string>(),
+  genre: Annotation<QuestionnaireAnswers['genre']>(),
   mode: Annotation<string>(),
   currentStage: Annotation<Stage>(),
   answers: Annotation<QuestionnaireAnswers>(),

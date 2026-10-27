@@ -16,18 +16,29 @@ describe('API Key 设置 HTTP', () => {
   let directory: string;
   const previousKey = process.env.DEEPSEEK_API_KEY;
   const complete = jest.fn();
+  let stored: Record<string, unknown> | null;
   beforeAll(async () => {
     directory = await mkdtemp(join(tmpdir(), 'rill-key-http-'));
     const config = parseAiConfig(configuration().llm);
-    config.apiKey = '';
+    config.providers.deepseek.apiKey = '';
+    stored = null;
+    const prisma = {
+      aiSettings: {
+        findUnique: jest.fn(async () => stored),
+        upsert: jest.fn(async ({ create, update }: { create: object; update: object }) => {
+          stored = stored ? { ...stored, ...update } : { ...create };
+          return stored;
+        }),
+      },
+    };
     const moduleRef = await Test.createTestingModule({
       controllers: [LlmController],
       providers: [
         {
           provide: KeySettingsService,
-          useValue: new KeySettingsService(config, join(directory, '.env')),
+          useValue: new KeySettingsService(config, join(directory, '.env'), prisma as never),
         },
-        { provide: LlmService, useValue: { complete, hasApiKey: () => true } },
+        { provide: LlmService, useValue: { complete } },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -45,9 +56,9 @@ describe('API Key 设置 HTTP', () => {
       .post('/api/llm/settings')
       .set('Host', 'localhost:3000')
       .set('Origin', 'http://localhost:5173')
-      .send({ action: 'replace', apiKey: 'sk-http-test' })
+      .send({ action: 'replace-key', provider: 'deepseek', apiKey: 'sk-http-test' })
       .expect(201);
-    expect(saved.body.hasApiKey).toBe(true);
+    expect(saved.body.providers.deepseek.hasUserKey).toBe(true);
     expect(JSON.stringify(saved.body)).not.toContain('sk-http-test');
     const queried = await request(app.getHttpServer()).get('/api/llm/settings').expect(200);
     expect(queried.headers['cache-control']).toBe('no-store');
@@ -59,11 +70,11 @@ describe('API Key 设置 HTTP', () => {
       .post('/api/llm/settings')
       .set('Host', 'localhost:3000')
       .set('Origin', 'https://other.example')
-      .send({ action: 'remove' })
+      .send({ action: 'remove-key', provider: 'deepseek' })
       .expect(403);
     const invalid = await request(app.getHttpServer())
       .post('/api/llm/settings')
-      .send({ action: 'replace', apiKey: 'sk-secret\nINJECT=1' })
+      .send({ action: 'replace-key', provider: 'deepseek', apiKey: 'sk-secret\nINJECT=1' })
       .expect(400);
     expect(JSON.stringify(invalid.body)).not.toContain('sk-secret');
   });

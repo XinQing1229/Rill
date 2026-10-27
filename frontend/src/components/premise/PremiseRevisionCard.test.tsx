@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { PremiseRevisionCard } from './PremiseRevisionCard';
@@ -138,7 +138,7 @@ it('项目运行时不能生成或采用，过期响应不更新已卸载卡片'
   expect(screen.queryByText('候选核心冲突')).not.toBeInTheDocument();
 });
 
-it('卡片在正式种子和原阶段操作之后，回看可用，自动模式待确认可继续', async () => {
+it('卡片位于正式种子之后且标题栏集中阶段操作，回看可用，自动模式待确认可继续', async () => {
   const onConfirm = vi.fn();
   const view = render(
     <StagePanel
@@ -151,8 +151,11 @@ it('卡片在正式种子和原阶段操作之后，回看可用，自动模式�
     />,
   );
   const heading = screen.getByRole('heading', { name: '按建议修改' });
+  const revision = screen.getByRole('region', { name: '按建议修改' });
+  expect(within(revision).getByRole('button', { name: '重新生成' })).toBeEnabled();
+  expect(within(revision).getByRole('button', { name: '回退到此阶段' })).toBeEnabled();
   expect(
-    screen.getByText('阶段操作').compareDocumentPosition(heading) &
+    screen.getByRole('region', { name: '避雷' }).compareDocumentPosition(heading) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(screen.getByRole('button', { name: '生成修改预览' })).toBeEnabled();

@@ -171,6 +171,23 @@ describe('PipelineService', () => {
     expect((await service.get(project.id)).currentStage).toBe('premise');
   });
 
+  it('多选类型持久化、详情与列表读取完整组合，后续生成接收全部类型', async () => {
+    const genre: QuestionnaireAnswers['genre'] = ['dushi', 'chaogu', 'chuanyue'];
+    const project = await service.create({ title: '组合类型', answers: { ...answers, genre } });
+    expect(project.genre).toEqual(genre);
+    const detail = await service.get(project.id);
+    expect(detail.genre).toEqual(genre);
+    expect(detail.stages).toContain('world');
+    expect(JSON.parse(detail.answers).genre).toEqual(genre);
+    expect((await service.list()).find((item) => item.id === project.id)?.genre).toEqual(genre);
+    await service.generate(project.id, { wait: true });
+    expect(premiseGenerate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ genre }),
+      project.id,
+    );
+  });
+
   it('必答项缺失时创建失败', async () => {
     await expect(
       service.create({ title: 'x', answers: { genre: 'xuanhuan' } as QuestionnaireAnswers }),
@@ -266,6 +283,18 @@ describe('PipelineService', () => {
     premiseGenerate.mockResolvedValue(undefined);
     const retried = await service.generate(project.id, { force: true, wait: true });
     expect(retried.started).toBe(true);
+  });
+
+  it('注入正文服务不会延长手动种子任务的超时', async () => {
+    // 生产模块始终注入正文服务，种子仍应使用普通阶段的兜底期限。
+    (service as unknown as { prose: object }).prose = { reconcile: async () => undefined };
+    (service as unknown as { generationTimeoutMs: number }).generationTimeoutMs = 50;
+    const project = await service.create({ title: '种子超时隔离', answers });
+    premiseGenerate.mockImplementation(() => new Promise<void>(() => undefined));
+    await expect(service.generate(project.id, { wait: true })).rejects.toThrow('生成超时');
+    const after = await service.get(project.id);
+    expect(after.status).toBe('failed');
+    expect(after.stageStates.premise.status).toBe('failed');
   });
 
   it('已失效的完成产物不会被当作可用产物跳过', async () => {

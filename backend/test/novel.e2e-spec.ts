@@ -66,6 +66,36 @@ describe('创作流水线 API (e2e)', () => {
     ).toBe(true);
   });
 
+  it('组合问卷和项目 API 保留全部类型，拒绝空选择', async () => {
+    const genre = ['dushi', 'chaogu', 'chuanyue'];
+    const questionnaire = await request(app.getHttpServer())
+      .get('/api/novel/questionnaire?genre=xuanhuan,xuanyi')
+      .expect(200);
+    const keys = questionnaire.body.questions.map((question: { key: string }) => question.key);
+    expect(keys).toEqual(expect.arrayContaining(['extras.goldenFinger', 'extras.caseScale']));
+    await request(app.getHttpServer())
+      .get('/api/novel/questionnaire?genre=dushi,unknown')
+      .expect(404);
+    await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ answers: { ...answers, genre: [] } })
+      .expect(400);
+    const created = await request(app.getHttpServer())
+      .post('/api/novel/projects')
+      .send({ title: '都市炒股穿越', answers: { ...answers, genre } })
+      .expect(201);
+    expect(created.body.genre).toEqual(genre);
+    const detail = await request(app.getHttpServer())
+      .get(`/api/novel/projects/${created.body.id}`)
+      .expect(200);
+    expect(detail.body.genre).toEqual(genre);
+    expect(detail.body.stages).toContain('world');
+    const list = await request(app.getHttpServer()).get('/api/novel/projects').expect(200);
+    expect(
+      list.body.find((project: { id: string }) => project.id === created.body.id).genre,
+    ).toEqual(genre);
+  });
+
   it('未知类型返回 404，非法问卷返回 400 且带字段原因', async () => {
     await request(app.getHttpServer())
       .get('/api/novel/questionnaire?genre=not-a-genre')

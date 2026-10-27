@@ -1,4 +1,11 @@
-import { Genre, Stage, StoryLength } from '@rill/shared';
+import {
+  Genre,
+  GenreSelection,
+  parseStoredGenre,
+  selectedGenres,
+  Stage,
+  StoryLength,
+} from '@rill/shared';
 
 export interface ExtraQuestion {
   key: string;
@@ -106,6 +113,54 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
     traits: ['情感推进清晰', '关系张力足', '细节有温度'],
     extraQuestions: [],
   },
+  xianxia: {
+    label: '仙侠',
+    worldWeight: 'detailed',
+    skipStages: [],
+    suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 6144,
+    suggestedWordsPerChapter: 2500,
+    traits: ['修炼体系自洽', '宗门与修士关系鲜明', '问道与人物抉择交织'],
+    extraQuestions: [],
+  },
+  chaogu: {
+    label: '炒股',
+    worldWeight: 'minimal',
+    skipStages: ['world'],
+    suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 2048,
+    suggestedWordsPerChapter: 2200,
+    traits: ['交易规则与市场背景自洽', '资金变化与风险有依据', '人物博弈推动情节'],
+    extraQuestions: [],
+  },
+  chuanyue: {
+    label: '穿越',
+    worldWeight: 'detailed',
+    skipStages: [],
+    suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 6144,
+    suggestedWordsPerChapter: 2500,
+    traits: ['穿越规则自洽', '原有认知与新环境形成冲突', '身份变化影响人物命运'],
+    extraQuestions: [],
+  },
+  cthulhu: {
+    label: '克苏鲁神话',
+    worldWeight: 'detailed',
+    skipStages: [],
+    suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: 6144,
+    suggestedWordsPerChapter: 2500,
+    traits: [
+      '未知与宇宙尺度带来恐惧',
+      '禁忌知识伴随认知与理智代价',
+      '线索逐步揭示真相并保留不可知性',
+    ],
+    extraQuestions: [],
+  },
   other: {
     label: '其他',
     worldWeight: 'light',
@@ -122,11 +177,37 @@ export const GENRE_PROFILES: Record<Genre, GenreProfile> = {
 const ALL_STAGES: Stage[] = ['premise', 'world', 'characters', 'relations', 'outline', 'prose'];
 
 /** 阶段列表 = 完整流程 − 该类型声明跳过的阶段 */
-export function stagesFor(genre: Genre): Stage[] {
-  const skipped = GENRE_PROFILES[genre].skipStages;
+export function stagesFor(genre: GenreSelection | string): Stage[] {
+  const skipped = profileFor(genre).skipStages;
   return ALL_STAGES.filter((stage) => !skipped.includes(stage));
 }
 
-export function profileFor(genre: Genre): GenreProfile {
-  return GENRE_PROFILES[genre];
+/** 所选类型平等合并：阶段取并集，特征与问卷去重，预算取最大值。 */
+export function profileFor(genre: GenreSelection | string): GenreProfile {
+  const genres = selectedGenres(typeof genre === 'string' ? parseStoredGenre(genre) : genre);
+  const profiles = genres.map((item) => GENRE_PROFILES[item]);
+  if (profiles.length === 1) return profiles[0];
+  const weights = ['minimal', 'light', 'detailed'] as const;
+  return {
+    label: profiles.map((profile) => profile.label).join('、'),
+    worldWeight:
+      weights[Math.max(...profiles.map((profile) => weights.indexOf(profile.worldWeight)))],
+    skipStages: ALL_STAGES.filter((stage) =>
+      profiles.every((profile) => profile.skipStages.includes(stage)),
+    ),
+    suggestedChapters: CHAPTERS,
+    characterCount: CHARACTERS,
+    worldMaxTokens: Math.max(...profiles.map((profile) => profile.worldMaxTokens)),
+    suggestedWordsPerChapter: Math.max(
+      ...profiles.map((profile) => profile.suggestedWordsPerChapter),
+    ),
+    traits: [...new Set(profiles.flatMap((profile) => profile.traits))],
+    extraQuestions: [
+      ...new Map(
+        profiles
+          .flatMap((profile) => profile.extraQuestions)
+          .map((question) => [question.key, question]),
+      ).values(),
+    ],
+  };
 }

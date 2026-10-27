@@ -61,7 +61,7 @@ export class CharacterGenerator implements StageGenerator {
     const traceId = newTraceId();
     const result = await this.llm.completeStructured<{
       characters: Array<Record<string, unknown>>;
-    }>(CharacterListSchema, [{ role: 'user', content: prompt }], { traceId, usage: 'draft' });
+    }>(CharacterListSchema, [{ role: 'user', content: prompt }], { traceId });
 
     const characters = result.characters ?? [];
     if (characters.length === 0) {

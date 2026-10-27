@@ -1,10 +1,23 @@
 import { useMemo, useState } from 'react';
 import { Alert, App, Button, Input, Select, Skeleton } from 'antd';
+import {
+  ArrowRightOutlined,
+  BulbOutlined,
+  EditOutlined,
+  FileTextOutlined,
+  ReadOutlined,
+  SlidersOutlined,
+  ThunderboltOutlined,
+  UserOutlined,
+  NodeIndexOutlined,
+  ApartmentOutlined,
+} from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   CreateProjectSchema,
   GENRE_LABELS,
-  GENRES,
+  genreLabel,
+  SELECTABLE_GENRES,
   DEFAULT_WRITING_STYLE,
   STORY_IDEA_MAX_LENGTH,
   REQUIRED_ANSWER_FIELDS,
@@ -25,17 +38,24 @@ const REQUIRED_FIELD_LABELS: Record<(typeof REQUIRED_ANSWER_FIELDS)[number], str
 };
 
 const GENRE_HINTS: Record<Genre, string> = {
-  xuanhuan: '力量体系与境界',
-  dushi: '现代都市行业与生活',
-  xuanyi: '悬念布局与真相',
+  xuanhuan: '我命由我不由天',
+  dushi: '冷硬如冰山，唯独对她失了分寸',
+  xuanyi: '真相只有一个',
   lishi: '历史背景与制度',
   kehuan: '技术推演与边界',
-  yanqing: '情感关系与障碍',
+  yanqing: 'baby～你就是我的唯一(♡ω♡)',
+  xianxia: '激活无敌系统，神装功法一键领取',
+  chaogu: '我是未成年，我要退款(╥﹏╥)',
+  chuanyue: '别问我从哪来，先说现在是哪年',
+  cthulhu: '你玩过元歌的诡秘之主吗',
   other: '不拘一格',
 };
 
 /** 问卷键 → 答案字段：必答项直取，extras. 前缀归入 extras */
-function answerFromValues(values: Record<string, string>): QuestionnaireAnswers | null {
+function answerFromValues(
+  values: Record<string, string>,
+  genres: Genre[],
+): QuestionnaireAnswers | null {
   const extras: Record<string, string> = {};
   for (const [key, value] of Object.entries(values)) {
     if (value === undefined || value === '') continue;
@@ -45,7 +65,7 @@ function answerFromValues(values: Record<string, string>): QuestionnaireAnswers 
     }
   }
   const candidate = {
-    genre: values.genre as Genre | undefined,
+    genre: genres,
     length: values.length as QuestionnaireAnswers['length'] | undefined,
     writingStyle: { ...DEFAULT_WRITING_STYLE, id: values.writingStyle },
     idea: values.idea,
@@ -161,7 +181,7 @@ export function NewProjectPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<PipelineMode>('manual');
-  const [genre, setGenre] = useState<Genre | null>(null);
+  const [genre, setGenre] = useState<Genre[]>([]);
   const [values, setValues] = useState<Record<string, string>>({
     length: 'short',
     writingStyle: DEFAULT_WRITING_STYLE.id,
@@ -173,7 +193,7 @@ export function NewProjectPage() {
     data: questionnaire,
     loading,
     error: questionnaireError,
-  } = useQuestionnaire(genre ?? undefined);
+  } = useQuestionnaire(genre.length ? genre : undefined);
 
   const bodyQuestions = useMemo(
     () =>
@@ -187,7 +207,9 @@ export function NewProjectPage() {
   const extraQuestions = bodyQuestions.filter((q) => q.key.startsWith('extras.'));
   const previewStages = [
     '种子',
-    ...(genre === 'dushi' || genre === 'yanqing' ? [] : ['世界观']),
+    ...(genre.length > 0 && genre.every((item) => ['dushi', 'yanqing', 'chaogu'].includes(item))
+      ? []
+      : ['世界观']),
     '人物',
     '关系',
     '大纲',
@@ -201,30 +223,25 @@ export function NewProjectPage() {
   };
 
   const chooseGenre = (next: Genre) => {
-    // 换类型：保留必答 3 项（与类型无关），清空上一类型的级联项
-    if (genre !== null && genre !== next) {
-      setValues((prev) => {
-        const next2: Record<string, string> = {};
-        for (const [key, value] of Object.entries(prev)) {
-          if (!key.startsWith('extras.')) next2[key] = value;
-        }
-        return next2;
-      });
-    }
-    setGenre(next);
-    setStep(2);
+    setGenre((previous) =>
+      previous.includes(next) ? previous.filter((item) => item !== next) : [...previous, next],
+    );
+    // 类型组合改变后重新选择级联偏好，保留文风等公共输入。
+    setValues((previous) =>
+      Object.fromEntries(Object.entries(previous).filter(([key]) => !key.startsWith('extras.'))),
+    );
   };
 
   const missingRequired = useMemo(() => {
     return REQUIRED_ANSWER_FIELDS.filter((key) =>
-      key === 'genre' ? !genre : !values[key]?.trim(),
+      key === 'genre' ? genre.length === 0 : !values[key]?.trim(),
     ).map((key) => REQUIRED_FIELD_LABELS[key]);
   }, [genre, values]);
 
   const submit = async () => {
     setSubmitError(null);
-    if (!genre) return;
-    const answers = answerFromValues({ ...values, genre });
+    if (!genre.length) return;
+    const answers = answerFromValues(values, genre);
     if (answers === null) {
       message.error(
         values.idea?.trim().length > STORY_IDEA_MAX_LENGTH
@@ -267,30 +284,32 @@ export function NewProjectPage() {
   };
 
   return (
-    <div className="page creation-intent">
+    <div className={`page creation-intent${step === 2 ? ' intent-details' : ''}`}>
       <div className="crumbs">
         <Link to="/">项目</Link> / 新建项目
       </div>
       <div className="title-row">
+        {step === 2 && (
+          <span className="intent-title-icon" aria-hidden="true">
+            <EditOutlined />
+          </span>
+        )}
         <div>
-          <h1>{step === 1 ? '选择类型' : '创作意图'}</h1>
+          <h1>{step === 1 ? '选择小说类型' : '创作意图'}</h1>
           <div className="sub">
             {step === 1 ? (
-              '类型决定阶段列表与问卷的级联问题'
+              '一念起故事生'
             ) : (
               <>
-                已选类型：
-                <b style={{ color: 'var(--text)', fontWeight: 500 }}>
-                  {genre && GENRE_LABELS[genre]}
-                </b>
-                （
-                <a
-                  onClick={() => setStep(1)}
-                  style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}
-                >
-                  返回更改
-                </a>
-                ）
+                告诉我们你的想法，我们将帮你生成更贴合的内容。
+                <span className="intent-selected-genre">
+                  已选类型：
+                  <b style={{ color: 'var(--text)', fontWeight: 500 }}>{genreLabel(genre)}</b>（
+                  <button type="button" className="intent-change-genre" onClick={() => setStep(1)}>
+                    返回更改
+                  </button>
+                  ）
+                </span>
               </>
             )}
           </div>
@@ -299,38 +318,61 @@ export function NewProjectPage() {
 
       {step === 1 && (
         <>
-          <div className="field full" style={{ marginBottom: 24 }}>
+          <div className="field full mode-section">
             <label>推进模式</label>
-            <PipelineModeSelect value={mode} onChange={setMode} />
-            <p className="hint">创建后可在项目设置中调整，生成期间不可修改。</p>
+            <PipelineModeSelect value={mode} onChange={setMode} variant="cards" />
           </div>
-          <div className="genre-grid" role="listbox" aria-label="类型选择">
-            {GENRES.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={`genre-card${genre === item ? ' selected' : ''}`}
-                onClick={() => chooseGenre(item)}
-              >
-                <b>{GENRE_LABELS[item]}</b>
-                <span>{GENRE_HINTS[item]}</span>
-              </button>
-            ))}
+          <section className="genre-section" aria-labelledby="genre-section-title">
+            <div className="genre-section-head">
+              <h2 id="genre-section-title">小说类型</h2>
+            </div>
+            <div className="genre-grid" role="group" aria-label="类型选择（可多选）">
+              {SELECTABLE_GENRES.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className={`genre-card genre-card-${item}${genre.includes(item) ? ' selected' : ''}`}
+                  aria-pressed={genre.includes(item)}
+                  onClick={() => chooseGenre(item)}
+                >
+                  <span className="genre-icon" aria-hidden="true" />
+                  <span className="genre-copy">
+                    <b>{GENRE_LABELS[item]}</b>
+                    <span className="genre-description">{GENRE_HINTS[item]}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+          <div className="wizard-foot">
+            <span className="hint" aria-live="polite">
+              {genre.length ? `已选：${genreLabel(genre)}` : '请至少选择一个类型'}
+            </span>
+            <span style={{ flex: 1 }} />
+            <Button type="primary" disabled={!genre.length} onClick={() => setStep(2)}>
+              下一步
+            </Button>
           </div>
         </>
       )}
 
-      {step === 2 && genre !== null && (
+      {step === 2 && genre.length > 0 && (
         <div className="wizard-layout">
-          <div>
-            <div className="field full" style={{ marginBottom: 24 }}>
+          <div className="intent-form">
+            <div className="intent-tip" id="story-idea-help">
+              <BulbOutlined aria-hidden="true" />
+              <span>
+                可以简单描述故事背景、人物、风格或你希望尝试的方向，越具体越好。留空时，根据你选择的类型和写法构思。
+              </span>
+            </div>
+            <div className="field full intent-story">
               <label htmlFor="story-idea">你想写什么故事？（选填）</label>
               <Input.TextArea
                 id="story-idea"
                 value={values.idea ?? ''}
                 onChange={(event) => setValue('idea', event.target.value)}
                 placeholder="例如：一个男大学生在股市做短线，从一万元本金起步，最终赚到一个亿。"
-                autoSize={{ minRows: 4, maxRows: 10 }}
+                autoSize={{ minRows: 6, maxRows: 12 }}
                 count={{ max: STORY_IDEA_MAX_LENGTH }}
                 status={
                   (values.idea?.trim().length ?? 0) > STORY_IDEA_MAX_LENGTH ? 'error' : undefined
@@ -344,9 +386,6 @@ export function NewProjectPage() {
                   故事想法最多 2000 字符，请精简后再创建。
                 </p>
               )}
-              <p className="hint" id="story-idea-help" style={{ marginTop: 24 }}>
-                写下主角、处境、目标，或者一个你想看的情节。不用先想好书名，一句话也可以。留空时，根据你选择的类型和写法构思。
-              </p>
             </div>
             {loading && <Skeleton active paragraph={{ rows: 6 }} />}
             {questionnaireError !== null && (
@@ -364,12 +403,15 @@ export function NewProjectPage() {
             )}
             {questionnaire !== null && (
               <>
-                <h2>希望怎么写</h2>
+                <h2 className="intent-section-title">
+                  <FileTextOutlined aria-hidden="true" />
+                  希望怎么写
+                </h2>
                 <div className="form-grid">
                   {coreQuestions.map((question) => (
                     <div
                       key={question.key}
-                      className={`field${question.key === 'idea' ? ' full' : ''}`}
+                      className={`field${question.key === 'writingStyle' ? ' full' : ''}`}
                     >
                       <label>
                         {question.label}
@@ -386,8 +428,8 @@ export function NewProjectPage() {
                     </div>
                   ))}
                 </div>
-                <details style={{ marginTop: 24 }}>
-                  <summary style={{ cursor: 'pointer', padding: '12px 0' }}>
+                <details className="intent-preferences">
+                  <summary>
                     更多偏好（选填）{preferenceCount > 0 ? ` · 已填 ${preferenceCount} 项` : ''}
                   </summary>
                   <div className="field full" style={{ margin: '16px 0 24px' }}>
@@ -422,7 +464,7 @@ export function NewProjectPage() {
                   </div>
                 </details>
                 <div className="wizard-foot">
-                  <span className="hint">
+                  <span className="hint intent-submit-hint">
                     {mode === 'manual'
                       ? '创建后在工作台开始生成，每阶段确认后继续。'
                       : '创建后立即启动自动推进，正文仍需逐章接受。'}
@@ -437,6 +479,7 @@ export function NewProjectPage() {
                   <Button onClick={() => setStep(1)}>返回上一步</Button>
                   <Button type="primary" loading={submitting} onClick={() => void submit()}>
                     {mode === 'auto' ? '创建项目并自动推进' : '创建项目'}
+                    <ArrowRightOutlined aria-hidden="true" />
                   </Button>
                 </div>
               </>
@@ -444,57 +487,100 @@ export function NewProjectPage() {
           </div>
 
           <aside className="summary-rail">
-            <h2>本次创作设定</h2>
-            <p className="meta">已选写法由你决定；AI 围绕故事想法补充情节并拟定书名</p>
-            <h3>故事想法</h3>
-            {values.idea?.trim() ? (
-              values.idea.trim().length <= 100 ? (
-                <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                  {values.idea.trim()}
-                </p>
-              ) : (
-                <details>
-                  <summary
-                    style={{ cursor: 'pointer', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
-                  >
-                    {values.idea.trim().slice(0, 100)}
-                    {values.idea.trim().length > 100 ? '…（展开原文）' : ''}
-                  </summary>
-                  <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                    {values.idea.trim()}
+            <div className="intent-summary-heading">
+              <span className="intent-summary-icon" aria-hidden="true">
+                <ThunderboltOutlined />
+              </span>
+              <div>
+                <h2>本次创作设定</h2>
+                <p className="meta">基于你的选择生成创作方案</p>
+              </div>
+            </div>
+            <section className="intent-summary-card">
+              <div className="intent-story-preview">
+                <h3>故事想法</h3>
+                <div>
+                  {values.idea?.trim() ? (
+                    values.idea.trim().length <= 100 ? (
+                      <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                        {values.idea.trim()}
+                      </p>
+                    ) : (
+                      <details>
+                        <summary
+                          style={{
+                            cursor: 'pointer',
+                            whiteSpace: 'pre-wrap',
+                            overflowWrap: 'anywhere',
+                          }}
+                        >
+                          {values.idea.trim().slice(0, 100)}
+                          {values.idea.trim().length > 100 ? '…（展开原文）' : ''}
+                        </summary>
+                        <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                          {values.idea.trim()}
+                        </p>
+                      </details>
+                    )
+                  ) : (
+                    <p className="hint">由 AI 根据所选设定构思</p>
+                  )}
+                </div>
+              </div>
+              <dl className="kv">
+                <dt>书名</dt>
+                <dd>{title.trim() || '根据故事生成'}</dd>
+                <dt>类型</dt>
+                <dd>{genreLabel(genre)}</dd>
+                {bodyQuestions
+                  .filter((q) => !q.key.startsWith('extras.') || values[q.key]?.trim())
+                  .map((q) => (
+                    <SummaryRow key={q.key} question={q} value={values[q.key]} />
+                  ))}
+              </dl>
+            </section>
+            <section className="intent-summary-card intent-mode-card">
+              <h2>
+                <SlidersOutlined aria-hidden="true" />
+                创作模式
+              </h2>
+              <div className="intent-mode-description">
+                <span className="intent-mode-icon" aria-hidden="true">
+                  <NodeIndexOutlined />
+                </span>
+                <div>
+                  <p>{mode === 'manual' ? '手动推进' : '自动推进'}</p>
+                  <p className="hint">
+                    {mode === 'manual' ? '每阶段确认后继续' : '连续生成，正文逐章人工接受'}
                   </p>
-                </details>
-              )
-            ) : (
-              <p className="hint">由 AI 根据所选设定构思</p>
-            )}
-            <dl className="kv">
-              <dt>书名</dt>
-              <dd>{title.trim() || '根据故事生成'}</dd>
-              <dt>类型</dt>
-              <dd>{genre && GENRE_LABELS[genre]}</dd>
-              {bodyQuestions
-                .filter((q) => !q.key.startsWith('extras.') || values[q.key]?.trim())
-                .map((q) => (
-                  <SummaryRow key={q.key} question={q} value={values[q.key]} />
+                </div>
+              </div>
+            </section>
+            <section className="intent-summary-card intent-preview-card">
+              <h2>
+                <ReadOutlined aria-hidden="true" />
+                生成要素参考
+              </h2>
+              <ol className="preview">
+                {previewStages.map((stage) => (
+                  <li key={stage}>
+                    <span className="intent-stage-icon" aria-hidden="true">
+                      {stage === '种子' || stage === '正文' ? (
+                        <FileTextOutlined />
+                      ) : stage === '人物' || stage === '关系' ? (
+                        <UserOutlined />
+                      ) : (
+                        <ApartmentOutlined />
+                      )}
+                    </span>
+                    <div>
+                      <b>{stage}</b>
+                      {stage === '种子' && <span>书名、梗概、主角与冲突</span>}
+                    </div>
+                  </li>
                 ))}
-            </dl>
-            <div className="rule" />
-            <h2>推进模式</h2>
-            <p>{mode === 'manual' ? '手动推进' : '自动推进'}</p>
-            <p className="hint">
-              {mode === 'manual' ? '每阶段确认后继续' : '连续生成，正文逐章人工接受'}
-            </p>
-            <div className="rule" />
-            <h2>生成预告</h2>
-            <ol className="preview">
-              {previewStages.map((stage) => (
-                <li key={stage}>
-                  <b>{stage}</b>
-                  {stage === '种子' && <span>书名、梗概、主角与冲突</span>}
-                </li>
-              ))}
-            </ol>
+              </ol>
+            </section>
           </aside>
         </div>
       )}

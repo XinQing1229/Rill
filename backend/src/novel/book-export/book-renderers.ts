@@ -17,6 +17,7 @@ export async function renderBook(
   metadata: BookMetadata,
   chapters: BookDocument[],
   fingerprint: string,
+  cover?: { data: Buffer; mimeType: 'image/jpeg' | 'image/png' },
 ): Promise<Buffer> {
   const heads = chapters.map((c) => chapterHeading(c.chapterNumber, c.title));
   if (format === 'txt')
@@ -60,6 +61,16 @@ export async function renderBook(
       '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
     ),
   };
+  const coverName = cover?.mimeType === 'image/jpeg' ? 'cover.jpg' : 'cover.png';
+  if (cover) {
+    files[`OEBPS/${coverName}`] = cover.data;
+    files['OEBPS/cover.xhtml'] = strToU8(
+      xhtml(
+        '封面',
+        `<div style="text-align:center"><img src="${coverName}" alt="封面" style="max-width:100%;max-height:100%;object-fit:contain"/></div>`,
+      ),
+    );
+  }
   files['OEBPS/title.xhtml'] = strToU8(
     xhtml(
       metadata.title,
@@ -85,7 +96,7 @@ export async function renderBook(
     );
   });
   files['OEBPS/content.opf'] = strToU8(
-    `<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id" xml:lang="zh-CN"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">urn:sha256:${fingerprint}</dc:identifier><dc:title>${xml(metadata.title)}</dc:title><dc:language>zh-CN</dc:language>${metadata.author ? `<dc:creator>${xml(metadata.author)}</dc:creator>` : ''}${metadata.introduction ? `<dc:description>${xml(metadata.introduction)}</dc:description>` : ''}<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')}</meta></metadata><manifest><item id="title" href="title.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="style" href="style.css" media-type="text/css"/>${chapters.map((c) => `<item id="c${c.chapterNumber}" href="chapter-${c.chapterNumber}.xhtml" media-type="application/xhtml+xml"/>`).join('')}</manifest><spine><itemref idref="title"/><itemref idref="nav"/>${chapters.map((c) => `<itemref idref="c${c.chapterNumber}"/>`).join('')}</spine></package>`,
+    `<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id" xml:lang="zh-CN"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">urn:sha256:${fingerprint}</dc:identifier><dc:title>${xml(metadata.title)}</dc:title><dc:language>zh-CN</dc:language>${metadata.author ? `<dc:creator>${xml(metadata.author)}</dc:creator>` : ''}${metadata.introduction ? `<dc:description>${xml(metadata.introduction)}</dc:description>` : ''}<meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')}</meta></metadata><manifest>${cover ? `<item id="cover-image" href="${coverName}" media-type="${cover.mimeType}" properties="cover-image"/><item id="cover-page" href="cover.xhtml" media-type="application/xhtml+xml"/>` : ''}<item id="title" href="title.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="style" href="style.css" media-type="text/css"/>${chapters.map((c) => `<item id="c${c.chapterNumber}" href="chapter-${c.chapterNumber}.xhtml" media-type="application/xhtml+xml"/>`).join('')}</manifest><spine>${cover ? '<itemref idref="cover-page"/>' : ''}<itemref idref="title"/><itemref idref="nav"/>${chapters.map((c) => `<itemref idref="c${c.chapterNumber}"/>`).join('')}</spine></package>`,
   );
   return new Promise((resolve, reject) =>
     zip(files, { level: 6 }, (error, data) => (error ? reject(error) : resolve(Buffer.from(data)))),

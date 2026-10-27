@@ -1,5 +1,6 @@
 import { PremiseChangeSummaryView } from './PremiseChangeSummaryView';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { EditOutlined } from '@ant-design/icons';
 import { Alert, Button, Input, Popconfirm, Space } from 'antd';
 import { STAGE_LABELS, type PremisePreview, type ProjectDetail } from '@rill/shared';
 import { adoptPremise, previewPremise } from '../../api/novel';
@@ -7,6 +8,7 @@ import { PremiseView } from './PremiseView';
 import { readStageState } from '../../lib/stage';
 
 interface Props {
+  actions?: ReactNode;
   project: ProjectDetail;
   busy: boolean;
   onBusyChange: (busy: boolean) => void;
@@ -14,7 +16,7 @@ interface Props {
 }
 
 /** 正式种子与候选分开展示，失败时保留输入和最后一次成功预览。 */
-export function PremiseRevisionCard({ project, busy, onBusyChange, onChanged }: Props) {
+export function PremiseRevisionCard({ project, busy, onBusyChange, onChanged, actions }: Props) {
   const labelId = useId();
   const [feedback, setFeedback] = useState('');
   const [preview, setPreview] = useState<PremisePreview | null>(null);
@@ -73,16 +75,17 @@ export function PremiseRevisionCard({ project, busy, onBusyChange, onChanged }: 
 
   return (
     <section
-      className="pv-card"
+      className="pv-card pv-revision"
       aria-labelledby={`${labelId}-heading`}
       aria-busy={pending !== null}
-      style={{ marginTop: 24 }}
     >
       <div className="pv-card-head">
+        <EditOutlined className="pv-section-icon" aria-hidden="true" />
         <h2 id={`${labelId}-heading`} className="pv-title">
           按建议修改
         </h2>
         <span className="pv-hint">先预览，再决定是否采用</span>
+        {actions}
       </div>
       <label htmlFor={labelId}>修改建议</label>
       <Input.TextArea

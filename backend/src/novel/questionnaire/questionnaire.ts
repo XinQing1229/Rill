@@ -86,7 +86,11 @@ export class QuestionnaireService {
   validate(answers: Partial<QuestionnaireAnswers>): void {
     const missing = REQUIRED_ANSWER_FIELDS.filter((field) => {
       const value = answers[field];
-      return value === undefined || value === null || value.trim() === '';
+      return (
+        value === undefined ||
+        value === null ||
+        (Array.isArray(value) ? value.length === 0 : value.trim() === '')
+      );
     });
     if (missing.length > 0) {
       throw new MissingRequiredAnswersError([...missing]);

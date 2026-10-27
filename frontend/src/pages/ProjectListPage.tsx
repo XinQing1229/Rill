@@ -1,10 +1,35 @@
+import { CoverThumbnail } from '../components/cover/CoverThumbnail';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Empty, Modal, Popconfirm, Segmented, Skeleton } from 'antd';
+import {
+  Alert,
+  Button,
+  Empty,
+  Input,
+  Modal,
+  Popconfirm,
+  Popover,
+  Segmented,
+  Select,
+  Skeleton,
+  Tag,
+} from 'antd';
+import {
+  CloseCircleOutlined,
+  EditOutlined,
+  FileOutlined,
+  FolderOutlined,
+  Loading3QuartersOutlined,
+  MoreOutlined,
+  PlusOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  GENRE_LABELS,
+  genreLabel,
   LENGTH_LABELS,
+  PUBLICATION_STATUS_LABELS,
   STAGE_LABELS,
+  type PublicationStatus,
   type ProjectScope,
   type ProjectSummary,
 } from '@rill/shared';
@@ -14,9 +39,11 @@ import {
   listProjects,
   purgeProject,
   restoreProject,
+  setPublicationStatus,
 } from '../api/novel';
 import { StatusTag } from '../components/StatusTag';
 import { formatUpdatedAt } from '../lib/stage';
+import './ProjectListPage.css';
 
 /** 列表页回答的问题：「我的项目进行到哪了？」以及「刚删的项目还能找回来吗？」 */
 export function ProjectListPage() {
@@ -26,13 +53,20 @@ export function ProjectListPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [clearOpen, setClearOpen] = useState(false);
+  const [savingPublicationId, setSavingPublicationId] = useState<string | null>(null);
   const trash = scope === 'trash';
+  const [search, setSearch] = useState('');
+  const visibleProjects = projects?.filter((project) =>
+    project.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
+  );
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setError(null);
-    listProjects(scope)
-      .then(setProjects)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : '加载失败'));
+    try {
+      setProjects(await listProjects(scope));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '加载失败');
+    }
   }, [scope]);
 
   useEffect(() => {
@@ -52,6 +86,15 @@ export function ProjectListPage() {
     },
     [load],
   );
+
+  const changePublicationStatus = async (id: string, publicationStatus: PublicationStatus) => {
+    setSavingPublicationId(id);
+    try {
+      await run(() => setPublicationStatus(id, { publicationStatus }));
+    } finally {
+      setSavingPublicationId(null);
+    }
+  };
 
   const counts = useMemo(() => {
     const list = projects ?? [];
@@ -75,23 +118,20 @@ export function ProjectListPage() {
   })();
 
   return (
-    <div className="page">
+    <div className="page project-list">
       <div className="title-row">
         <div>
           <h1>{trash ? '回收站' : '项目'}</h1>
           <div className="sub">{subtitle}</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Segmented<ProjectScope>
-            value={scope}
-            onChange={(value) => {
-              setScope(value);
-              setProjects(null);
-            }}
-            options={[
-              { label: '创作中', value: 'active' },
-              { label: '回收站', value: 'trash' },
-            ]}
+        <div className="project-list-actions">
+          <Input
+            aria-label="搜索项目"
+            placeholder="搜索项目…"
+            prefix={<SearchOutlined aria-hidden="true" />}
+            allowClear
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
           />
           {trash ? (
             <Button danger disabled={!projects?.length} onClick={() => setClearOpen(true)}>
@@ -99,7 +139,9 @@ export function ProjectListPage() {
             </Button>
           ) : (
             <Link to="/new">
-              <Button type="primary">新建项目</Button>
+              <Button type="primary" icon={<PlusOutlined />}>
+                新建项目
+              </Button>
             </Link>
           )}
         </div>
@@ -157,19 +199,31 @@ export function ProjectListPage() {
         <>
           {!trash && (
             <div className="kpis">
-              <div className="kpi">
-                <div className="kpi-label">项目</div>
+              <div className="kpi kpi-total">
+                <span className="kpi-icon">
+                  <FileOutlined />
+                </span>
+                <div className="kpi-label">项目总数</div>
                 <div className="kpi-value num">{counts.total}</div>
               </div>
-              <div className="kpi">
+              <div className="kpi kpi-idle">
+                <span className="kpi-icon">
+                  <EditOutlined />
+                </span>
                 <div className="kpi-label">待操作</div>
                 <div className="kpi-value num">{counts.idle}</div>
               </div>
-              <div className="kpi">
+              <div className="kpi kpi-running">
+                <span className="kpi-icon">
+                  <Loading3QuartersOutlined />
+                </span>
                 <div className="kpi-label">生成中</div>
                 <div className="kpi-value num">{counts.running}</div>
               </div>
-              <div className="kpi">
+              <div className="kpi kpi-failed">
+                <span className="kpi-icon">
+                  <CloseCircleOutlined />
+                </span>
                 <div className="kpi-label">失败</div>
                 <div className="kpi-value num">{counts.failed}</div>
               </div>
@@ -177,14 +231,13 @@ export function ProjectListPage() {
           )}
 
           <div className="rows">
-            {projects.map((project) =>
+            {visibleProjects?.map((project) =>
               trash ? (
-                <div key={project.id} className="row">
+                <div key={project.id} className="row project-trash-row">
                   <span className="t">
                     {project.title}
                     <span className="sub">
-                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length] ?? '历史篇幅'}{' '}
-                      ·{' '}
+                      {genreLabel(project.genre)} · {LENGTH_LABELS[project.length] ?? '历史篇幅'} ·{' '}
                       {project.deletedAt
                         ? `删除于 ${formatUpdatedAt(project.deletedAt)}`
                         : '已删除'}
@@ -195,6 +248,7 @@ export function ProjectListPage() {
                     <span style={{ fontWeight: 500 }}>{STAGE_LABELS[project.currentStage]}</span>
                   </span>
                   <StatusTag status={project.status} />
+                  <Tag>{PUBLICATION_STATUS_LABELS[project.publicationStatus]}</Tag>
                   <span className="when">
                     <Button size="small" onClick={() => void run(() => restoreProject(project.id))}>
                       恢复
@@ -223,35 +277,87 @@ export function ProjectListPage() {
                   tabIndex={0}
                   onClick={() => void navigate(`/projects/${project.id}`)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') void navigate(`/projects/${project.id}`);
+                    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                      e.preventDefault();
+                      void navigate(`/projects/${project.id}`);
+                    }
                   }}
                 >
-                  <span className="t">
-                    {project.title}
-                    <span className="sub">
-                      {GENRE_LABELS[project.genre]} · {LENGTH_LABELS[project.length] ?? '历史篇幅'}{' '}
-                      · {project.mode === 'manual' ? '手动推进' : '自动推进'}
+                  <span className="project-cover" aria-hidden="true">
+                    {project.cover && (
+                      <CoverThumbnail
+                        projectId={project.id}
+                        assetId={project.cover.assetId}
+                        alt=""
+                      />
+                    )}
+                  </span>
+                  <span className="project-info">
+                    <span className="t">{project.title}</span>
+                    <span className="sub project-meta">
+                      <FolderOutlined aria-hidden="true" />
+                      {genreLabel(project.genre)} · {LENGTH_LABELS[project.length] ?? '历史篇幅'} ·{' '}
+                      {project.mode === 'manual' ? '手动推进' : '自动推进'}
+                    </span>
+                    <span className="stage-cell">
+                      <span>当前阶段</span>
+                      <strong>{STAGE_LABELS[project.currentStage]}</strong>
                     </span>
                   </span>
-                  <span className="stage-cell">
-                    <span>当前阶段</span>
-                    <span style={{ fontWeight: 500 }}>{STAGE_LABELS[project.currentStage]}</span>
+                  {project.status !== 'done' && (
+                    <span className="project-status">
+                      <StatusTag status={project.status} />
+                    </span>
+                  )}
+                  <span
+                    className="project-publication"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <span className="sub">发布状态</span>
+                    <Select<PublicationStatus>
+                      aria-label={`${project.title}的发布状态`}
+                      value={project.publicationStatus}
+                      loading={savingPublicationId === project.id}
+                      disabled={savingPublicationId !== null}
+                      className="publication-select"
+                      options={Object.entries(PUBLICATION_STATUS_LABELS).map(([value, label]) => ({
+                        value,
+                        label,
+                      }))}
+                      onChange={(value) => void changePublicationStatus(project.id, value)}
+                    />
                   </span>
-                  <StatusTag status={project.status} />
                   <span className="when">{formatUpdatedAt(project.updatedAt)}</span>
-                  <span onClick={(e) => e.stopPropagation()}>
-                    <Popconfirm
-                      title="删除该项目"
-                      description="删除后进入回收站，可在回收站恢复；产物会完整保留。"
-                      okText="删除"
-                      okButtonProps={{ danger: true }}
-                      cancelText="取消"
-                      onConfirm={() => void run(() => deleteProject(project.id))}
+                  <span
+                    className="project-more"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <Popover
+                      trigger="click"
+                      placement="bottomRight"
+                      content={
+                        <Popconfirm
+                          title="删除该项目"
+                          description="删除后进入回收站，可在回收站恢复；产物会完整保留。"
+                          okText="删除"
+                          okButtonProps={{ danger: true }}
+                          cancelText="取消"
+                          onConfirm={() => void run(() => deleteProject(project.id))}
+                        >
+                          <Button size="small" danger>
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      }
                     >
-                      <Button size="small" danger>
-                        删除
-                      </Button>
-                    </Popconfirm>
+                      <Button
+                        type="text"
+                        icon={<MoreOutlined />}
+                        aria-label={`${project.title}的更多操作`}
+                      />
+                    </Popover>
                   </span>
                 </div>
               ),
@@ -259,6 +365,24 @@ export function ProjectListPage() {
           </div>
         </>
       )}
+
+      {projects !== null && projects.length > 0 && visibleProjects?.length === 0 && (
+        <Empty description="没有找到匹配的项目" />
+      )}
+      <div className="project-list-scope">
+        <Segmented<ProjectScope>
+          value={scope}
+          onChange={(value) => {
+            setScope(value);
+            setProjects(null);
+            setSearch('');
+          }}
+          options={[
+            { label: '全部项目', value: 'active' },
+            { label: '回收站', value: 'trash' },
+          ]}
+        />
+      </div>
 
       <Modal
         open={clearOpen}

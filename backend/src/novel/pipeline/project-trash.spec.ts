@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { QuestionnaireAnswers } from '@rill/shared';
 
@@ -110,6 +110,46 @@ describe('项目软删除与回收站', () => {
   afterEach(() => {
     service.onModuleDestroy();
     fs.rmSync(checkpointDir, { recursive: true, force: true });
+  });
+
+  it('发布状态默认创作中，可双向切换且不改写阶段、执行状态和运行锁', async () => {
+    const project = await service.create({ title: '发布标记', answers });
+    expect(project.publicationStatus).toBe('writing');
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { status: 'running', runId: 'publication-test' },
+    });
+    await service.setPublicationStatus(project.id, { publicationStatus: 'published' });
+    const saved = await prisma.project.findUniqueOrThrow({ where: { id: project.id } });
+    expect(saved).toMatchObject({
+      publicationStatus: 'published',
+      currentStage: project.currentStage,
+      status: 'running',
+      runId: 'publication-test',
+      answers: project.answers,
+    });
+    expect((await service.list()).find((p) => p.id === project.id)?.publicationStatus).toBe(
+      'published',
+    );
+    await service.setPublicationStatus(project.id, { publicationStatus: 'writing' });
+    expect((await service.get(project.id)).publicationStatus).toBe('writing');
+  });
+
+  it('非法发布状态被拒绝，删除恢复保留标记且回收站项目不可修改', async () => {
+    const project = await service.create({ title: '发布标记恢复', answers });
+    await expect(
+      service.setPublicationStatus(project.id, { publicationStatus: 'done' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect((await service.get(project.id)).publicationStatus).toBe('writing');
+    await service.setPublicationStatus(project.id, { publicationStatus: 'published' });
+    expect((await service.softDelete(project.id)).publicationStatus).toBe('published');
+    await expect(
+      service.setPublicationStatus(project.id, { publicationStatus: 'writing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect((await service.restore(project.id)).publicationStatus).toBe('published');
+    await expect(
+      service.setPublicationStatus('missing', { publicationStatus: 'published' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('软删除后所有创作入口都不可见', async () => {

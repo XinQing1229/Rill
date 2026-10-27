@@ -1,105 +1,130 @@
+import {
+  AimOutlined,
+  BarChartOutlined,
+  CloseOutlined,
+  EnvironmentOutlined,
+  FireOutlined,
+  HeartOutlined,
+  IdcardOutlined,
+  ReadOutlined,
+  SafetyCertificateOutlined,
+  StarOutlined,
+  TeamOutlined,
+  ThunderboltOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
 import type { Premise } from '@rill/shared';
+import './PremiseView.css';
 
-/** 种子产物按兼容读取契约展示，不自造字段；分区卡片排版（梗概铺陈 + 发动机/主角/避雷独立卡片） */
+/** 种子与候选共用字段布局，兼容不含故事发动机的历史产物。 */
 export function PremiseView({ premise }: { premise: Premise }) {
+  const fields = [
+    { label: '一句话梗概', value: premise.logline, icon: StarOutlined },
+    { label: '主题', value: premise.theme, icon: AimOutlined },
+    { label: '核心冲突', value: premise.coreConflict, icon: ThunderboltOutlined },
+    {
+      label: '时代 / 地点',
+      value: `${premise.setting.era} · ${premise.setting.place}`,
+      icon: EnvironmentOutlined,
+    },
+    { label: '社会背景', value: premise.setting.socialBackground, icon: TeamOutlined },
+    { label: '卖点 / 钩子', value: premise.hook, icon: BarChartOutlined },
+  ];
+  const protagonistFields = [
+    { label: '姓名', value: premise.protagonist.name, icon: IdcardOutlined, tone: 'blue' },
+    { label: '身份', value: premise.protagonist.identity, icon: ReadOutlined, tone: 'green' },
+    { label: '渴望', value: premise.protagonist.desire, icon: FireOutlined, tone: 'orange' },
+    { label: '缺陷', value: premise.protagonist.flaw, icon: HeartOutlined, tone: 'red' },
+  ];
+
   return (
-    <div>
-      <div className="pv-section">
-        <div className="pv-field">
-          <h3>一句话梗概</h3>
-          <p>{premise.logline}</p>
-        </div>
-        <div className="pv-field">
-          <h3>主题</h3>
-          <p>{premise.theme}</p>
-        </div>
-        <div className="pv-field">
-          <h3>核心冲突</h3>
-          <p>{premise.coreConflict}</p>
-        </div>
-        <div className="pv-field">
-          <h3>时代 / 地点</h3>
-          <p>
-            {premise.setting.era} · {premise.setting.place}
-          </p>
-        </div>
-        <div className="pv-field">
-          <h3>社会背景</h3>
-          <p>{premise.setting.socialBackground}</p>
-        </div>
-        <div className="pv-field">
-          <h3>卖点 / 钩子</h3>
-          <p>{premise.hook}</p>
-        </div>
-      </div>
+    <div className="premise-view">
+      <dl className="pv-overview">
+        {fields.map(({ label, value, icon: Icon }) => (
+          <div className="pv-overview-field" key={label}>
+            <dt>
+              <Icon aria-hidden="true" />
+              {label}
+            </dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
 
       {premise.storyEngine && (
-        <section className="pv-card">
+        <section className="pv-card pv-engine" aria-label="故事发动机">
           <div className="pv-card-head">
+            <AimOutlined className="pv-section-icon" aria-hidden="true" />
             <h2 className="pv-title">故事发动机</h2>
             <span className="pv-hint">目标、阻力与逐步升级的代价</span>
           </div>
-          <div className="pv-row">
-            <span className="pv-label">开篇目标</span>
-            <p>{premise.storyEngine.openingGoal}</p>
-          </div>
-          <div className="pv-row">
-            <span className="pv-label">主要阻力</span>
-            <p>{premise.storyEngine.mainObstacle}</p>
-          </div>
-          <div className="pv-row">
-            <span className="pv-label">失败代价</span>
-            <p>{premise.storyEngine.failureCost}</p>
-          </div>
-          <div className="pv-row">
-            <span className="pv-label">压力升级</span>
-            <ol className="pv-steps">
-              {premise.storyEngine.escalationPath.map((step, index) => (
-                <li key={step}>
-                  <span className="pv-step-num num">{index + 1}</span>
-                  <p>{step}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <dl className="pv-engine-body">
+            <div className="pv-engine-row">
+              <dt>开篇目标</dt>
+              <dd>{premise.storyEngine.openingGoal}</dd>
+            </div>
+            <div className="pv-engine-row">
+              <dt>主要阻力</dt>
+              <dd>{premise.storyEngine.mainObstacle}</dd>
+            </div>
+            <div className="pv-engine-row">
+              <dt>失败代价</dt>
+              <dd>{premise.storyEngine.failureCost}</dd>
+            </div>
+            <div className="pv-engine-row">
+              <dt>压力升级</dt>
+              <dd>
+                <ol className="pv-steps">
+                  {premise.storyEngine.escalationPath.map((step, index) => (
+                    <li key={step}>
+                      <span className="pv-step-num num" aria-hidden="true">
+                        {index + 1}
+                      </span>
+                      <p>{step}</p>
+                    </li>
+                  ))}
+                </ol>
+              </dd>
+            </div>
+          </dl>
         </section>
       )}
 
-      <section className="pv-card">
+      <section className="pv-card pv-protagonist" aria-label="主角">
         <div className="pv-card-head">
+          <UserOutlined className="pv-section-icon" aria-hidden="true" />
           <h2 className="pv-title">主角</h2>
           <span className="pv-hint">完整人物设定由人物阶段扩展</span>
         </div>
-        <div className="pv-row slim">
-          <span className="pv-label">姓名</span>
-          <p className="pv-strong">{premise.protagonist.name}</p>
-        </div>
-        <div className="pv-row slim">
-          <span className="pv-label">身份</span>
-          <p>{premise.protagonist.identity}</p>
-        </div>
-        <div className="pv-row slim">
-          <span className="pv-label">渴望</span>
-          <p>{premise.protagonist.desire}</p>
-        </div>
-        <div className="pv-row slim">
-          <span className="pv-label">缺陷</span>
-          <p>{premise.protagonist.flaw}</p>
-        </div>
+        <dl className="pv-protagonist-grid">
+          {protagonistFields.map(({ label, value, icon: Icon, tone }) => (
+            <div className={`pv-person-field pv-person-${tone}`} key={label}>
+              <span className="pv-person-icon" aria-hidden="true">
+                <Icon />
+              </span>
+              <div className="pv-person-copy">
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            </div>
+          ))}
+        </dl>
       </section>
 
-      <section className="pv-card">
+      <section className="pv-card pv-avoid" aria-label="避雷">
         <div className="pv-card-head">
+          <SafetyCertificateOutlined className="pv-section-icon" aria-hidden="true" />
           <h2 className="pv-title">避雷</h2>
           <span className="pv-hint">后续生成需要避开的内容</span>
         </div>
-        <div className="pv-taboos">
+        <ul className="pv-taboos">
           {premise.taboos.map((taboo) => (
-            <span key={taboo} className="pv-taboo">
-              {taboo}
-            </span>
+            <li key={taboo} className="pv-taboo">
+              <CloseOutlined aria-hidden="true" />
+              <span>{taboo}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
     </div>
   );

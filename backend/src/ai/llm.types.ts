@@ -7,11 +7,9 @@ export interface ChatMessage {
 
 export interface CompleteOptions {
   signal?: AbortSignal;
-  /** 模型用途，决定模型与参数；默认 draft */
-  usage?: 'draft' | 'reasoning';
   /** 外部传入的追踪标识；不传则自动生成 */
   traceId?: string;
-  /** 覆盖用途默认的最大输出 token */
+  /** 覆盖当前模型默认的最大输出 token */
   maxTokens?: number;
 }
 
@@ -27,13 +25,10 @@ export interface CompletionResult {
   finishReason?: string;
   model: string;
   content: string;
-  reasoning?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
   traceId: string;
-  /** 记录该次调用实际使用的模型（便于追踪降级/回退） */
-  usageKind: 'draft' | 'reasoning';
 }

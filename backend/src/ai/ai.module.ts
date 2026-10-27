@@ -6,10 +6,12 @@ import { ModelRegistry } from './models/model.registry.js';
 import { PromptRegistry } from './prompts/prompt.registry.js';
 import { UsageRecorder } from './observability/usage-recorder.js';
 import { LlmService } from './llm.service.js';
+import { PrismaService } from '../novel/prisma.service.js';
 
 @Module({
   providers: [
     { provide: API_KEY_ENV_PATH, useFactory: backendEnvPath },
+    PrismaService,
     KeySettingsService,
     {
       provide: AI_CONFIG,

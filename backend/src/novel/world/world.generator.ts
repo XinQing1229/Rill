@@ -56,7 +56,7 @@ export class WorldGenerator implements StageGenerator {
       schema,
       [{ role: 'user', content: prompt }],
       // 详细档内容多，需要更大的输出预算（实测默认 2048 会被截断）
-      { traceId, usage: 'draft', maxTokens: profile.worldMaxTokens },
+      { traceId, maxTokens: profile.worldMaxTokens },
     );
 
     // 时代与地点从种子继承，不由模型生成

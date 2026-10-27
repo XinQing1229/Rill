@@ -39,10 +39,17 @@ describe('classifyError', () => {
 
   it('超时按服务端错误处理', () => {
     expect(classifyError(new Error('request timeout'))).toBe('server');
+    expect(classifyError(new Error('Request timed out.'))).toBe('server');
   });
 });
 
 describe('shouldRetry', () => {
+  it('主动取消不重试', () => {
+    expect(shouldRetry(new DOMException('取消', 'AbortError'))).toBe(false);
+    expect(shouldRetry(Object.assign(new Error('取消'), { name: 'APIUserAbortError' }))).toBe(
+      false,
+    );
+  });
   it('限流与服务端错误重试', () => {
     expect(shouldRetry(Object.assign(new Error('x'), { status: 429 }))).toBe(true);
     expect(shouldRetry(Object.assign(new Error('x'), { status: 500 }))).toBe(true);

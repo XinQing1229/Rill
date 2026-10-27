@@ -1,0 +1,235 @@
+/* 人物资料：姓名概要、双列字段和整行人物弧线。 */
+.character-stage > header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.character-stage > header h2 {
+  flex: none;
+}
+
+.character-stage > header .node-meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.character-stage > header .actions:empty {
+  display: none;
+}
+
+.character-view {
+  --character-line: var(--border);
+  --character-soft: #fafbfc;
+  --character-body: #606571;
+  display: grid;
+  gap: 28px;
+  padding-top: 16px;
+  container-type: inline-size;
+}
+
+.character-card {
+  min-width: 0;
+}
+
+.character-overview {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 20px;
+  border: 1px solid var(--character-line);
+  border-radius: 12px;
+  background: linear-gradient(110deg, var(--surface), var(--character-soft));
+}
+
+.character-intro {
+  flex: 1;
+  min-width: 0;
+}
+
+.character-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.character-name-row h3 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.character-role {
+  flex: none;
+  padding: 2px 12px;
+  border: 1px solid var(--character-line);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--character-body);
+  font-size: 14px;
+}
+
+.character-intro p,
+.character-quote p {
+  margin: 10px 0 0;
+  color: var(--character-body);
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.character-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 0 1 30%;
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border-radius: 10px;
+  background: #f7f7f6;
+}
+
+.character-quote > span {
+  color: #d2cdc7;
+  font-family: Georgia, serif;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.character-quote p {
+  margin: 0;
+}
+
+.character-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 16px 0 0;
+}
+
+.character-field {
+  position: relative;
+  min-width: 0;
+  padding: 20px 22px 20px 84px;
+  border: 1px solid var(--character-line);
+  border-radius: 12px;
+  background: linear-gradient(120deg, var(--surface), var(--character-soft));
+}
+
+.character-field dt {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.character-field-icon {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  color: var(--character-icon);
+  background: var(--character-icon-bg);
+  font-size: 22px;
+}
+
+.character-tone-slate {
+  --character-icon: #536f94;
+  --character-icon-bg: #eaf0f8;
+}
+
+.character-tone-green {
+  --character-icon: #30834e;
+  --character-icon-bg: #e6f6eb;
+}
+
+.character-tone-coral {
+  --character-icon: #b95b3d;
+  --character-icon-bg: #fcf0eb;
+}
+
+.character-tone-purple {
+  --character-icon: #7551a6;
+  --character-icon-bg: #f1ebfa;
+}
+
+.character-tone-amber {
+  --character-icon: #946b17;
+  --character-icon-bg: #fcf7e9;
+}
+
+.character-tone-blue {
+  --character-icon: #347fc0;
+  --character-icon-bg: #e8f4ff;
+}
+
+.character-field dd {
+  margin: 0;
+  color: var(--character-body);
+  font-size: 15px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.character-field-arc {
+  grid-column: 1 / -1;
+}
+
+.character-card > .ant-alert {
+  margin-top: 12px;
+}
+
+/* 根据工作台的实际可用宽度切换，兼容侧栏挤压的平板窗口。 */
+@container (max-width: 760px) {
+  .character-overview {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .character-quote {
+    flex-basis: 100%;
+  }
+
+  .character-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 440px) {
+  .character-overview {
+    padding: 16px;
+  }
+
+  .character-name-row h3 {
+    font-size: 22px;
+  }
+
+  .character-field {
+    padding: 16px;
+  }
+
+  .character-field dt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .character-field-icon {
+    position: static;
+    flex: none;
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+  }
+}

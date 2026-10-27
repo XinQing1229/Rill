@@ -348,7 +348,7 @@ export class ProseRevisionService implements OnApplicationBootstrap, OnModuleDes
               }),
             },
           ],
-          { traceId, usage: 'draft', maxTokens: 8192, rejectTruncated: true },
+          { traceId, maxTokens: 8192, rejectTruncated: true },
         ),
       ),
     );

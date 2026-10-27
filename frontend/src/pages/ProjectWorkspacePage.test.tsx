@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -90,4 +90,17 @@ describe('工作台推进模式设置', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '自动推进' })).toBeChecked();
   });
+});
+
+it('项目概览显示书名、实际阶段数、日期及问卷维度', () => {
+  const project = makeProject({
+    stages: ['premise', 'characters', 'relations', 'outline', 'prose'],
+  });
+  page(project);
+  const overview = within(screen.getByRole('region', { name: '项目信息' }));
+  expect(overview.getByRole('heading', { name: project.title, level: 1 })).toBeInTheDocument();
+  expect(overview.getByText('5 个阶段')).toBeInTheDocument();
+  expect(overview.getByText('2026-01-01')).toHaveAttribute('dateTime', project.updatedAt);
+  expect(overview.getByText('第三人称限知')).toBeInTheDocument();
+  expect(overview.getByText('待操作')).toBeInTheDocument();
 });

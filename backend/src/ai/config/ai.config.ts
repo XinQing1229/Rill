@@ -1,23 +1,26 @@
 import { z } from 'zod';
 
-export const MODEL_USAGES = ['draft', 'reasoning'] as const;
-export type ModelUsage = (typeof MODEL_USAGES)[number];
-
-const UsageSchema = z.object({
+const ModelProviderConfigSchema = z.object({
+  apiKey: z.string(),
+  baseUrl: z.string().url(),
   model: z.string().min(1),
+  minTemperature: z.number().min(0).max(2),
+  maxTemperature: z.number().positive().max(2),
+});
+
+const ModelDefaultsSchema = z.object({
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().int().positive(),
   timeout: z.number().int().positive(),
-  thinking: z.boolean(),
 });
 
 export const AiConfigSchema = z.object({
-  baseUrl: z.string().url(),
-  apiKey: z.string(),
-  usages: z.object({
-    draft: UsageSchema,
-    reasoning: UsageSchema,
+  providers: z.object({
+    deepseek: ModelProviderConfigSchema,
+    glm: ModelProviderConfigSchema,
   }),
+  defaults: ModelDefaultsSchema,
+  credentialEncryptionKey: z.string(),
   retry: z.object({
     maxAttempts: z.number().int().positive(),
     initialInterval: z.number().int().positive(),
@@ -38,7 +41,6 @@ export const AiConfigSchema = z.object({
 });
 
 export type AiConfig = z.infer<typeof AiConfigSchema>;
-export type UsageConfig = z.infer<typeof UsageSchema>;
 
 export const AI_CONFIG = Symbol('AI_CONFIG');
 
@@ -49,7 +51,7 @@ export function parseAiConfig(raw: unknown): AiConfig {
     const details = result.error.issues
       .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
       .join('; ');
-    throw new Error(`AI 配置校验失败（LLM_* / DEEPSEEK_* 环境变量）: ${details}`);
+    throw new Error(`AI 配置校验失败（LLM_* / DEEPSEEK_* / GLM_* 环境变量）: ${details}`);
   }
   return result.data;
 }

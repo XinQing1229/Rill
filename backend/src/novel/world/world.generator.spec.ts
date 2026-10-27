@@ -9,31 +9,9 @@ import { UsageRecorder } from '../../ai/observability/usage-recorder.js';
 import { PrismaService } from '../prisma.service.js';
 import { ArtifactRegistry } from '../pipeline/artifact.registry.js';
 import { WorldGenerator } from './world.generator.js';
+import { makeAiConfig } from '../../../test/ai-config-fixture.js';
 
-const config: AiConfig = {
-  baseUrl: 'https://api.deepseek.com',
-  apiKey: 'secret-key-value',
-  usages: {
-    draft: {
-      model: 'deepseek-flash',
-      temperature: 0.9,
-      maxTokens: 2048,
-      timeout: 60_000,
-      thinking: false,
-    },
-    reasoning: {
-      model: 'deepseek-flash',
-      temperature: 0.3,
-      maxTokens: 4096,
-      timeout: 120_000,
-      thinking: true,
-    },
-  },
-  retry: { maxAttempts: 3, initialInterval: 10, backoffFactor: 1, maxInterval: 20, jitter: false },
-  structured: { maxRepairAttempts: 2 },
-  budget: { maxCallsPerRequest: 6 },
-  pricing: { inputPerMTokens: null, outputPerMTokens: null },
-};
+const config: AiConfig = makeAiConfig();
 
 const premise: Premise = {
   title: '临安雪夜验尸录',

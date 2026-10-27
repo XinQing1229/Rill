@@ -69,7 +69,7 @@ export class PremiseGenerator implements StageGenerator {
     const premise = await this.llm.completeStructured<GeneratedPremise>(
       PremiseSchema,
       [{ role: 'user', content: prompt }],
-      { traceId, usage: 'draft' },
+      { traceId },
     );
 
     const resolved = resolvePremiseTitle(project, premise);

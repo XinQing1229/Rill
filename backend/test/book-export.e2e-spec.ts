@@ -1,3 +1,5 @@
+import sharp from 'sharp';
+import { CoverService } from '../src/novel/cover/cover.service.js';
 const jest = import.meta.jest;
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -524,5 +526,41 @@ describe('书本交付 HTTP、快照与任务恢复', () => {
     await prisma.project.update({ where: { id }, data: { deletedAt: null } });
     await service.resumeProject(id);
     expect((await service.download(id, j.id, 'txt')).data.length).toBeGreaterThan(0);
+  });
+  it('封面快照随任务固定，换图与删除不影响历史 EPUB，旧预览失效', async () => {
+    const covers = app.get(CoverService);
+    const image = await sharp({
+      create: { width: 30, height: 40, channels: 3, background: '#123456' },
+    })
+      .png()
+      .toBuffer();
+    const first = await covers.upload(id, image, 'first.png', 0);
+    const before = await preview();
+    const job = await create(['epub']);
+    expect((await settled(job.id)).status).toBe('succeeded');
+    const file = await service.download(id, job.id, 'epub');
+    const zip = unzipSync(file.data);
+    expect(zip['OEBPS/cover.png']).toBeDefined();
+    expect(strFromU8(zip['OEBPS/content.opf'])).toContain('properties="cover-image"');
+    expect(strFromU8(zip['OEBPS/content.opf']).indexOf('idref="cover-page"')).toBeLessThan(
+      strFromU8(zip['OEBPS/content.opf']).indexOf('idref="title"'),
+    );
+    await covers.remove(id, first.currentCover!.id, first.revision);
+    await request(app.getHttpServer())
+      .post(base() + '/jobs')
+      .send({ requestId: randomUUID(), previewToken: before.previewToken, formats: ['epub'] })
+      .expect(409);
+    expect((await service.job(id, job.id)).versionStatus).toBe('historical');
+    const original = Buffer.from(zip['OEBPS/cover.png']);
+    await prisma.bookExportFile.updateMany({
+      where: { jobId: job.id },
+      data: { status: 'failed' },
+    });
+    await prisma.bookExportJob.update({ where: { id: job.id }, data: { status: 'failed' } });
+    await service.retry(id, job.id, ['epub']);
+    expect((await settled(job.id)).status).toBe('succeeded');
+    expect(
+      Buffer.from(unzipSync((await service.download(id, job.id, 'epub')).data)['OEBPS/cover.png']),
+    ).toEqual(original);
   });
 });

@@ -1,3 +1,4 @@
+import { CoverModule } from './cover/cover.module.js';
 import { ProseRevisionService } from './prose/prose-revision.service.js';
 import { PremiseRevisionService } from './premise/premise-revision.service.js';
 import { BookExportModule } from './book-export/book-export.module.js';
@@ -17,7 +18,7 @@ import { PipelineService } from './pipeline/pipeline.service.js';
 import { NovelController } from './novel.controller.js';
 
 @Module({
-  imports: [AiModule, ProseContentModule, BookExportModule],
+  imports: [AiModule, ProseContentModule, BookExportModule, CoverModule],
   controllers: [NovelController],
   providers: [
     QuestionnaireService,

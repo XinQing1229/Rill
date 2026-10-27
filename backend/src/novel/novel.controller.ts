@@ -50,6 +50,8 @@ import {
   RollbackBodySchema,
   SetModeBodySchema,
   ProjectScopeSchema,
+  SetPublicationStatusBodySchema,
+  type SetPublicationStatusBody,
   type ProjectScope,
 } from '@rill/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
@@ -87,11 +89,15 @@ export class NovelController {
   /** 获取问卷结构（随类型级联） */
   @Get('questionnaire')
   getQuestionnaire(@Query('genre') genre: string) {
-    const valid = GENRES.find((item) => item === genre);
+    const genres = typeof genre === 'string' ? genre.split(',') : [];
+    const valid =
+      genres.length > 0 &&
+      new Set(genres).size === genres.length &&
+      genres.every((item) => GENRES.some((known) => known === item));
     if (!valid) {
       throw new NotFoundException(`未知类型: ${genre}，可用: ${GENRES.join(', ')}`);
     }
-    return this.questionnaire.build(valid as Genre);
+    return this.questionnaire.build(genres as Genre[]);
   }
 
   @Post('projects')
@@ -105,6 +111,15 @@ export class NovelController {
     @Query('scope', new ZodValidationPipe(ProjectScopeSchema)) scope?: ProjectScope | undefined,
   ) {
     return this.pipeline.list(scope ?? 'active');
+  }
+
+  /** 作者手动切换发布状态 */
+  @Patch('projects/:id/publication-status')
+  setPublicationStatus(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(SetPublicationStatusBodySchema)) body: SetPublicationStatusBody,
+  ) {
+    return this.pipeline.setPublicationStatus(id, body);
   }
 
   /** 软删除：移入回收站，产物保留可恢复 */

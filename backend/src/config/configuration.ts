@@ -22,24 +22,28 @@ function bool(value: string | undefined, fallback: boolean): boolean {
 export default function registerConfiguration() {
   return {
     llm: {
-      baseUrl: process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com',
-      apiKey: process.env.DEEPSEEK_API_KEY ?? '',
-      usages: {
-        draft: {
-          model: process.env.LLM_DRAFT_MODEL ?? 'deepseek-flash',
-          temperature: num(process.env.LLM_DRAFT_TEMPERATURE, 0.9),
-          maxTokens: num(process.env.LLM_DRAFT_MAX_TOKENS, 2048),
-          timeout: num(process.env.LLM_DRAFT_TIMEOUT, 60_000),
-          thinking: bool(process.env.LLM_DRAFT_THINKING, false),
+      providers: {
+        deepseek: {
+          apiKey: process.env.DEEPSEEK_API_KEY ?? '',
+          baseUrl: process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com',
+          model: process.env.LLM_DEEPSEEK_MODEL ?? process.env.LLM_DRAFT_MODEL ?? 'deepseek-flash',
+          minTemperature: 0,
+          maxTemperature: 2,
         },
-        reasoning: {
-          model: process.env.LLM_REASONING_MODEL ?? 'deepseek-flash',
-          temperature: num(process.env.LLM_REASONING_TEMPERATURE, 0.3),
-          maxTokens: num(process.env.LLM_REASONING_MAX_TOKENS, 4096),
-          timeout: num(process.env.LLM_REASONING_TIMEOUT, 120_000),
-          thinking: bool(process.env.LLM_REASONING_THINKING, true),
+        glm: {
+          apiKey: process.env.GLM_API_KEY ?? '',
+          baseUrl: 'https://open.bigmodel.cn/api/paas/v4/',
+          model: process.env.LLM_GLM_MODEL ?? 'glm-5.3',
+          minTemperature: Number.MIN_VALUE,
+          maxTemperature: 0.999999,
         },
       },
+      defaults: {
+        temperature: num(process.env.LLM_TEMPERATURE, 0.9),
+        maxTokens: num(process.env.LLM_MAX_TOKENS, 4096),
+        timeout: num(process.env.LLM_TIMEOUT, 60_000),
+      },
+      credentialEncryptionKey: process.env.LLM_CREDENTIAL_ENCRYPTION_KEY ?? '',
       retry: {
         maxAttempts: num(process.env.LLM_RETRY_MAX_ATTEMPTS, 3),
         initialInterval: num(process.env.LLM_RETRY_INITIAL_INTERVAL, 500),

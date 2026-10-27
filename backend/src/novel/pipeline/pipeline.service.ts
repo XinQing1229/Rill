@@ -27,9 +27,11 @@ import {
   ArtifactStatus,
   DEFAULT_WRITING_STYLE,
   CreateProjectSchema,
+  parseStoredGenre,
   QUESTIONNAIRE_VERSION,
   PipelineMode,
   ProjectScope,
+  SetPublicationStatusBodySchema,
   QuestionnaireAnswers,
   Stage,
 } from '@rill/shared';
@@ -181,11 +183,11 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
     };
     const stages = stagesFor(answers.genre);
 
-    return this.prisma.project.create({
+    const created = await this.prisma.project.create({
       data: {
         title: parsed.data.title ?? '未命名作品',
         titleSource: parsed.data.title ? 'author' : 'placeholder',
-        genre: input.answers.genre,
+        genre: Array.isArray(answers.genre) ? JSON.stringify(answers.genre) : answers.genre,
         length: input.answers.length,
         mode: input.mode ?? 'manual',
         currentStage: stages[0],
@@ -195,6 +197,7 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
         premise: { create: { data: '{}', status: 'pending' } },
       },
     });
+    return { ...created, genre: parseStoredGenre(created.genre) };
   }
 
   async get(id: string) {
@@ -204,6 +207,7 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
       where: { id, ...VISIBLE_PROJECT },
       include: {
         proseBook: { include: { chapters: true } },
+        coverState: true,
         premise: true,
         world: true,
         characters: true,
@@ -215,6 +219,10 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
     // 附加该类型的完整阶段列表：前端时间轴与上游判断共用一份事实来源
     return {
       ...project,
+      cover: project.coverState?.currentAssetId
+        ? { assetId: project.coverState.currentAssetId, revision: project.coverState.revision }
+        : null,
+      genre: parseStoredGenre(project.genre),
       stageStates: Object.fromEntries(
         stagesFor(project.genre as QuestionnaireAnswers['genre']).map((stage) => {
           const state = this.assembler.readStageState(project, stage);
@@ -250,7 +258,7 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
   /** 项目列表（列表页用）：默认按更新时间倒序，回收站按删除时间倒序 */
   async list(scope: ProjectScope = 'active') {
     const trash = scope === 'trash';
-    return this.prisma.project.findMany({
+    const projects = await this.prisma.project.findMany({
       where: trash ? { deletedAt: { not: null } } : VISIBLE_PROJECT,
       orderBy: trash ? { deletedAt: 'desc' } : { updatedAt: 'desc' },
       select: {
@@ -261,11 +269,32 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
         mode: true,
         currentStage: true,
         status: true,
+        publicationStatus: true,
         createdAt: true,
         updatedAt: true,
         deletedAt: true,
+        coverState: true,
       },
     });
+    return projects.map((project) => ({
+      ...project,
+      genre: parseStoredGenre(project.genre),
+      cover: project.coverState?.currentAssetId
+        ? { assetId: project.coverState.currentAssetId, revision: project.coverState.revision }
+        : null,
+    }));
+  }
+
+  /** 仅修改人工发布标记，不改变阶段、产物或流水线执行权 */
+  async setPublicationStatus(id: string, input: unknown) {
+    const parsed = SetPublicationStatusBodySchema.safeParse(input);
+    if (!parsed.success) throw new BadRequestException('发布状态必须为创作中或已发布');
+    const updated = await this.prisma.project.updateMany({
+      where: { id, ...VISIBLE_PROJECT },
+      data: parsed.data,
+    });
+    if (updated.count !== 1) throw new NotFoundException(`项目不存在: ${id}`);
+    return parsed.data;
   }
 
   /**
@@ -293,12 +322,13 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
         mode: true,
         currentStage: true,
         status: true,
+        publicationStatus: true,
         createdAt: true,
         updatedAt: true,
         deletedAt: true,
       },
     });
-    return project;
+    return { ...project, genre: parseStoredGenre(project.genre) };
   }
 
   /** 从回收站恢复：清空删除时刻，项目连同产物与进度回到创作列表 */
@@ -562,10 +592,7 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
       this.generationTimeoutMs,
       3 *
         (this.config.get<number>('llm.budget.maxCallsPerRequest') ?? 6) *
-        Math.max(
-          this.config.get<number>('llm.usages.draft.timeout') ?? 60000,
-          this.config.get<number>('llm.usages.reasoning.timeout') ?? 60000,
-        ) +
+        (this.config.get<number>('llm.defaults.timeout') ?? 60000) +
         180000,
     );
     const deadline = new Promise<never>((_, reject) => {
@@ -815,11 +842,9 @@ export class PipelineService implements OnModuleInit, OnModuleDestroy {
           : { projectId: id, genre: answers.genre, mode, currentStage: fallbackStage, answers };
 
     let timeoutMs = this.generationTimeoutMs;
-    if (this.prose) {
-      const requestMs = Math.max(
-        this.config.get<number>('llm.usages.draft.timeout') ?? 60000,
-        this.config.get<number>('llm.usages.reasoning.timeout') ?? 60000,
-      );
+    // 正文需要连续生成、审核和摘要；仅为实际可能执行正文的运行扩展预算。
+    if (this.prose && (fallbackStage === 'prose' || mode === 'auto')) {
+      const requestMs = this.config.get<number>('llm.defaults.timeout') ?? 60000;
       const calls = this.config.get<number>('llm.budget.maxCallsPerRequest') ?? 6;
       timeoutMs = Math.max(timeoutMs, 3 * requestMs * calls + 180000);
     }

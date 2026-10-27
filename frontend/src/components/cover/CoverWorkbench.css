@@ -1,0 +1,205 @@
+.cover-workbench {
+  display: grid;
+  gap: 20px;
+  container-type: inline-size;
+}
+.cover-main-card,
+.cover-history-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  background: var(--surface);
+}
+.cover-main-card {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 32px;
+}
+.cover-workbench h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.cover-current {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+.cover-current h2 {
+  white-space: nowrap;
+}
+.cover-current-image {
+  width: 240px;
+  max-width: 100%;
+  aspect-ratio: 3 / 4;
+  border: 4px solid var(--raised);
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+}
+.cover-current-image .ant-image,
+.cover-current-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.cover-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  background: var(--raised);
+  font-size: 12px;
+}
+.cover-empty .anticon {
+  font-size: 36px;
+}
+.cover-settings p {
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+.cover-settings > .ant-btn {
+  height: 44px;
+  margin-bottom: 18px;
+}
+.cover-rules {
+  padding: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  background: #f5f7fb;
+  border: 1px solid #e9edf5;
+  border-radius: 8px;
+}
+.cover-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+.cover-tools .ant-btn {
+  height: 44px;
+}
+.cover-settings .cover-note,
+.cover-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 12px 0 0;
+}
+.cover-history-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.cover-history-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.cover-history-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 32px;
+}
+.cover-history-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 130px;
+  padding: 0;
+  position: relative;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--raised);
+  color: var(--muted);
+}
+.cover-history-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.cover-history-image.is-current {
+  border-color: #5268ff;
+}
+.cover-current-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 4px 8px;
+  background: #5268ff;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+}
+.cover-history-item time {
+  display: block;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 8px;
+}
+.cover-history-card .ant-pagination {
+  margin-top: 24px;
+}
+.cover-upload-preview {
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.cover-upload-preview > img,
+.cover-upload-preview .ant-image-img {
+  max-height: 380px;
+  max-width: 100%;
+  object-fit: contain;
+}
+.cover-history-image:focus-visible {
+  outline: 3px solid #5268ff;
+  outline-offset: 3px;
+}
+.shell .side-stage.cover-nav.viewed {
+  background: #eef0ff;
+  color: #334eff;
+}
+@container (max-width: 1000px) {
+  .cover-main-card {
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 24px;
+  }
+  .cover-current {
+    flex-direction: column;
+    gap: 0;
+  }
+  .cover-history-grid {
+    gap: 20px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 680px) {
+  .cover-main-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cover-current {
+    align-items: center;
+  }
+  .cover-current h2 {
+    align-self: flex-start;
+  }
+  .cover-history-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+@container (max-width: 360px) {
+  .cover-history-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.shell .side-stage.cover-nav.viewed .st-name,
+.shell .side-stage.cover-nav.viewed .stage-icon {
+  color: #334eff;
+}

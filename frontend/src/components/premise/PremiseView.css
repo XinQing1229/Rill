@@ -1,0 +1,422 @@
+/* 种子工作台：与参考图一致的浅色分区、双列字段和紧凑信息卡。 */
+.premise-view,
+.premise-stage,
+.pv-revision {
+  --pv-accent: #6065ff;
+  --pv-ink: #535e73;
+  --pv-muted: #717c90;
+  --pv-line: #e6ecf4;
+  --pv-soft: #f7f9fc;
+}
+
+.node.premise-stage {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.node.premise-stage > header {
+  min-height: 64px;
+  padding: 14px 28px;
+  margin: 0;
+  border: 1px solid var(--pv-line);
+  border-radius: 12px 12px 0 0;
+  background: var(--pv-soft);
+  box-sizing: border-box;
+  gap: 18px;
+}
+
+.node.premise-stage > header h2 {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.pv-seed-icon {
+  width: 30px;
+  height: 30px;
+  color: #2dc883;
+  flex: none;
+}
+
+.premise-stage > header .node-meta {
+  color: var(--pv-muted);
+}
+
+.premise-view .pv-overview {
+  margin: 0;
+  padding: 14px 28px 18px;
+  border: 1px solid var(--pv-line);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--surface);
+}
+
+.pv-overview-field,
+.pv-engine-row {
+  display: grid;
+  grid-template-columns: 162px minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  color: var(--pv-ink);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.pv-overview-field dt {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-weight: 500;
+}
+
+.pv-overview-field dt .anticon {
+  font-size: 18px;
+  flex: none;
+}
+
+.premise-view dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.premise-view .pv-card,
+.pv-card.pv-revision {
+  padding: 18px 20px;
+  margin-top: 16px;
+  border-color: var(--pv-line);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.premise-view .pv-engine {
+  background: var(--pv-soft);
+}
+
+.premise-view .pv-card-head,
+.pv-revision .pv-card-head {
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pv-section-icon {
+  color: var(--pv-accent);
+  font-size: 25px;
+  flex: none;
+}
+
+.premise-view .pv-title,
+.pv-revision .pv-title {
+  padding: 0;
+  font-size: 18px;
+  font-weight: 650;
+  flex: none;
+}
+
+.premise-view .pv-title::before,
+.pv-revision .pv-title::before {
+  display: none;
+}
+
+.premise-view .pv-hint,
+.pv-revision .pv-hint {
+  font-size: 13px;
+  color: var(--pv-muted);
+}
+
+.pv-engine-body {
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 2px 18px;
+  margin: 0;
+}
+
+.pv-engine-row {
+  grid-template-columns: 144px minmax(0, 1fr);
+  padding: 9px 8px;
+  font-size: 13px;
+}
+
+.pv-engine-row + .pv-engine-row {
+  border-top: 1px solid #eef1f6;
+}
+
+.pv-engine-row dt {
+  font-weight: 600;
+}
+
+.premise-view .pv-steps {
+  gap: 5px;
+}
+
+.premise-view .pv-steps li {
+  gap: 10px;
+  align-items: baseline;
+}
+
+.premise-view .pv-steps p {
+  margin: 0;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.premise-view .pv-step-num {
+  width: 28px;
+  height: 24px;
+  font-size: 13px;
+  border-radius: 8px;
+  background: #eeefff;
+  color: #484cdb;
+}
+
+.pv-protagonist {
+  container-type: inline-size;
+}
+
+.pv-protagonist .pv-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: var(--pv-soft);
+  color: var(--pv-ink);
+  font-size: 24px;
+}
+
+.pv-protagonist-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin: 0;
+}
+
+.pv-person-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 18px;
+  border-radius: 14px;
+  min-height: 140px;
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pv-person-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 20px;
+  background: var(--pv-person-icon-bg);
+  font-size: 30px;
+  flex: none;
+}
+
+.pv-person-copy {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.pv-person-field dt {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.pv-person-field dd {
+  color: var(--pv-ink);
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.pv-person-blue {
+  --pv-person-icon-bg: #e7eaff;
+  background: #f1f4ff;
+  color: #455ad0;
+}
+
+.pv-person-green {
+  --pv-person-icon-bg: #dcf4eb;
+  background: #edfaf5;
+  color: #17815b;
+}
+
+.pv-person-orange {
+  --pv-person-icon-bg: #ffeadc;
+  background: #fff5ee;
+  color: #a7592f;
+}
+
+.pv-person-red {
+  --pv-person-icon-bg: #ffe1e8;
+  background: #fff1f3;
+  color: #bc4255;
+}
+
+.premise-view .pv-avoid {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.premise-view .pv-avoid .pv-card-head {
+  margin: 0;
+  flex: none;
+}
+
+.premise-view .pv-taboos {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  gap: 10px;
+  min-width: 0;
+}
+
+.premise-view .pv-taboo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border: 0;
+  border-radius: 9px;
+  background: #fff0f3;
+  color: #bc4255;
+  padding: 9px 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.pv-taboo .anticon {
+  flex: none;
+  font-size: 16px;
+}
+
+.pv-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pv-revision > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pv-ink);
+  margin-bottom: 8px;
+}
+
+/* 候选不带阶段标题，梗概独立闭合。 */
+.pv-revision .pv-overview {
+  border-top: 1px solid var(--pv-line);
+  border-radius: 12px;
+}
+
+/* 使用卡片实际宽度，兼容侧栏、原稿和候选预览中的布局。 */
+@container (max-width: 1000px) {
+  .pv-protagonist-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 520px) {
+  .pv-protagonist-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .pv-person-field {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .pv-person-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 16px;
+    font-size: 25px;
+  }
+
+  .pv-person-copy {
+    padding-top: 0;
+  }
+
+  .pv-person-field dt {
+    margin-bottom: 6px;
+  }
+
+  .pv-person-field dd {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .premise-view .pv-avoid {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .node.premise-stage > header {
+    padding: 14px 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .node.premise-stage > header h2 {
+    gap: 12px;
+  }
+
+  .node.premise-stage .node-meta {
+    width: 100%;
+    margin-left: 0;
+    white-space: normal;
+  }
+
+  .premise-view .pv-overview,
+  .premise-view .pv-card,
+  .pv-card.pv-revision {
+    padding: 16px;
+  }
+
+  .pv-overview-field,
+  .pv-engine-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .pv-engine-body {
+    padding: 4px 10px;
+  }
+
+  .premise-view .pv-card-head,
+  .pv-revision .pv-card-head {
+    gap: 10px;
+  }
+
+  .premise-view .pv-card-head .pv-hint,
+  .pv-revision .pv-card-head .pv-hint {
+    flex-basis: 100%;
+  }
+
+  .pv-revision .pv-stage-actions {
+    width: 100%;
+    justify-content: flex-start;
+    margin: 0;
+  }
+}

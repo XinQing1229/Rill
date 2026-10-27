@@ -1,0 +1,231 @@
+/* 世界观：概要与独立资料卡，沿用工作台的浅色与细分隔线。 */
+.world-view,
+.world-stage {
+  --wv-line: var(--border);
+  --wv-blue: #1677db;
+  --wv-blue-soft: #edf5ff;
+  --wv-indigo: #5357c9;
+  --wv-indigo-soft: #f1f2ff;
+  --wv-amber: #a96513;
+  --wv-amber-soft: #fff5e6;
+}
+
+.node.world-stage {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.node.world-stage > header {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 18px 24px;
+  border: 1px solid var(--wv-line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.node.world-stage-ready > header {
+  margin-bottom: 0;
+  padding-bottom: 12px;
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+}
+
+.node.world-stage > header h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.world-stage > header .actions:empty {
+  display: none;
+}
+
+.world-stage > header .node-meta {
+  white-space: normal;
+}
+
+.wv-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--wv-indigo-soft);
+  color: var(--wv-indigo);
+  font-size: 19px;
+}
+
+.world-stage > header .wv-icon {
+  background: var(--wv-blue-soft);
+  color: var(--wv-blue);
+}
+
+.wv-icon-amber {
+  background: var(--wv-amber-soft);
+  color: var(--wv-amber);
+}
+
+.world-view .wv-overview {
+  padding: 10px 26px 18px;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 8px 16px;
+  border: 1px solid var(--wv-line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.world-stage-ready .wv-overview {
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+}
+
+.world-view .wv-overview dd {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.wv-inherited {
+  display: block;
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 3px;
+}
+
+.wv-card {
+  margin-top: 14px;
+  padding: 18px 24px 12px;
+  border: 1px solid var(--wv-line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 2px 6px rgb(19 20 22 / 2%);
+}
+
+.wv-card-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.wv-card-heading h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.wv-meta {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.wv-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wv-row {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding: 7px 2px;
+}
+
+.wv-row + .wv-row {
+  border-top: 1px solid var(--rule);
+}
+
+.wv-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--raised);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.wv-row-content {
+  min-width: 0;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.wv-row-content strong {
+  font-weight: 600;
+  margin-right: 16px;
+}
+
+.wv-custom .block-title {
+  border: 0;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.wv-custom .block-title h3 {
+  font-size: 17px;
+}
+
+.wv-empty {
+  margin: 12px 0 0;
+}
+
+.world-stage > .block-title {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .node.world-stage > header,
+  .wv-card {
+    padding: 16px;
+  }
+
+  .node.world-stage > header .node-meta {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .world-view .wv-overview {
+    padding: 12px 16px 16px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .world-view .wv-overview dt {
+    padding-bottom: 0;
+  }
+
+  .wv-custom .kv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wv-custom .kv dt {
+    padding-bottom: 0;
+  }
+
+  .wv-inherited {
+    display: inline;
+    margin-left: 8px;
+  }
+
+  .wv-row {
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .wv-row-content strong {
+    display: block;
+    margin-right: 0;
+    margin-bottom: 3px;
+  }
+}

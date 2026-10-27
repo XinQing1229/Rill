@@ -39,12 +39,68 @@ async function gotoStep2() {
   mockGetQuestionnaire.mockResolvedValue(questionnaireFixture);
   renderPage();
   await userEvent.click(screen.getByRole('button', { name: /玄幻/ }));
+  await userEvent.click(screen.getByRole('button', { name: '下一步' }));
   await screen.findByText('创作意图');
 }
 
 describe('NewProjectPage 问卷向导', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it.each([
+    ['仙侠', 'xianxia', true],
+    ['炒股', 'chaogu', false],
+    ['穿越', 'chuanyue', true],
+    ['克苏鲁神话', 'cthulhu', true],
+  ] as const)('新类型 %s 可创建且阶段预告正确', async (label, genre, hasWorld) => {
+    mockGetQuestionnaire.mockResolvedValue(questionnaireFixture);
+    mockCreate.mockResolvedValue({ id: 'new-project' } as never);
+    renderPage();
+    expect(screen.queryByRole('button', { name: /其他/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /历史/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(label) }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
+    await screen.findByText('创作意图');
+    expect(mockGetQuestionnaire).toHaveBeenCalledWith(genre);
+    expect(Boolean(screen.queryByText('世界观'))).toBe(hasWorld);
+    await userEvent.click(screen.getByRole('button', { name: '第三人称限知' }));
+    await userEvent.click(screen.getByRole('button', { name: '创建项目' }));
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ answers: expect.objectContaining({ genre: [genre] }) }),
+    );
+  });
+
+  it('可多选和取消，空选择禁用下一步，返回保留选择并提交完整组合', async () => {
+    mockGetQuestionnaire.mockResolvedValue(questionnaireFixture);
+    mockCreate.mockResolvedValue({ id: 'multi' } as never);
+    renderPage();
+    const next = screen.getByRole('button', { name: '下一步' });
+    expect(next).toBeDisabled();
+    const city = screen.getByRole('button', { name: /都市/ });
+    await userEvent.click(city);
+    expect(city).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(city);
+    expect(next).toBeDisabled();
+    await userEvent.click(city);
+    await userEvent.click(screen.getByRole('button', { name: /炒股/ }));
+    await userEvent.click(screen.getByRole('button', { name: /穿越/ }));
+    expect(screen.queryByText('创作意图')).not.toBeInTheDocument();
+    await userEvent.click(next);
+    await screen.findByText('创作意图');
+    expect(mockGetQuestionnaire).toHaveBeenLastCalledWith(['dushi', 'chaogu', 'chuanyue']);
+    expect(screen.getByRole('complementary')).toHaveTextContent('都市、炒股、穿越');
+    expect(screen.getByRole('complementary')).toHaveTextContent('世界观');
+    await userEvent.click(screen.getByText('返回更改'));
+    expect(screen.getByRole('button', { name: /炒股/ })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
+    await userEvent.click(screen.getByRole('button', { name: '第三人称限知' }));
+    await userEvent.click(screen.getByRole('button', { name: '创建项目' }));
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        answers: expect.objectContaining({ genre: ['dushi', 'chaogu', 'chuanyue'] }),
+      }),
+    );
   });
 
   it('第一步选择类型后进入级联问卷', async () => {
@@ -72,6 +128,7 @@ describe('NewProjectPage 问卷向导', () => {
     mockCreate.mockResolvedValue({ id: 'prj_style' } as never);
     renderPage();
     await userEvent.click(screen.getByRole('button', { name: /言情/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
     expect(screen.queryByText('关系设定')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '短篇爽文' })).toHaveAttribute(
@@ -81,6 +138,7 @@ describe('NewProjectPage 问卷向导', () => {
     expect(screen.getByRole('complementary')).toHaveTextContent('短篇爽文');
     await userEvent.click(screen.getByRole('button', { name: '返回上一步' }));
     await userEvent.click(screen.getByRole('button', { name: /玄幻/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     expect(await screen.findByRole('button', { name: '短篇爽文' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -116,6 +174,7 @@ describe('NewProjectPage 问卷向导', () => {
     mockCreate.mockResolvedValue({ id: 'prj_idea' } as never);
     renderPage();
     await userEvent.click(screen.getByRole('button', { name: /都市/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
     const idea = '一个男大学生在股市做短线，从一万元本金起步，最终赚到一个亿。';
     await userEvent.type(screen.getByRole('textbox', { name: '你想写什么故事？（选填）' }), idea);
@@ -149,6 +208,7 @@ describe('NewProjectPage 问卷向导', () => {
     expect(screen.queryByRole('textbox', { name: '项目标题' })).not.toBeInTheDocument();
     mockGetQuestionnaire.mockResolvedValue(questionnaireFixture);
     await userEvent.click(screen.getByRole('button', { name: /玄幻/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
 
     await userEvent.click(screen.getByText(/更多偏好/));
@@ -157,7 +217,7 @@ describe('NewProjectPage 问卷向导', () => {
     await userEvent.type(titleInput, '青川令新篇');
     await userEvent.click(screen.getByRole('button', { name: '返回上一步' }));
     expect(screen.queryByRole('textbox', { name: '书名（选填）' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /玄幻/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
     await userEvent.click(screen.getByText(/更多偏好/));
     expect(screen.getByRole('textbox', { name: '书名（选填）' })).toHaveValue('青川令新篇');
@@ -174,7 +234,7 @@ describe('NewProjectPage 问卷向导', () => {
     expect(body.mode).toBe('manual');
     expect(mockGenerate).not.toHaveBeenCalled();
     expect(body.answers).toEqual({
-      genre: 'xuanhuan',
+      genre: ['xuanhuan'],
       length: 'short',
       pov: '第三人称限知',
       writingStyle: { id: 'short-satisfying', version: 'v1' },
@@ -190,10 +250,12 @@ describe('NewProjectPage 问卷向导', () => {
     expect(screen.getByRole('radio', { name: '手动推进' })).toBeChecked();
     await userEvent.click(screen.getByRole('radio', { name: '自动推进' }));
     await userEvent.click(screen.getByRole('button', { name: /玄幻/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
     await userEvent.click(screen.getByText('返回更改'));
     expect(screen.getByRole('radio', { name: '自动推进' })).toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: /悬疑/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
     expect(screen.getByRole('complementary')).toHaveTextContent('自动推进');
     await userEvent.click(screen.getByRole('button', { name: '短篇' }));
@@ -212,6 +274,7 @@ describe('NewProjectPage 问卷向导', () => {
     renderPage();
     await userEvent.click(screen.getByRole('radio', { name: '自动推进' }));
     await userEvent.click(screen.getByRole('button', { name: /玄幻/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
     await userEvent.click(screen.getByRole('button', { name: '短篇' }));
     await userEvent.click(screen.getByRole('button', { name: '第三人称限知' }));
@@ -231,6 +294,7 @@ describe('NewProjectPage 问卷向导', () => {
     // 返回第一步换类型
     await userEvent.click(screen.getByText('返回更改'));
     await userEvent.click(screen.getByRole('button', { name: /悬疑/ }));
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
     await screen.findByText('创作意图');
 
     // 必答（篇幅）保留；级联选答（人物数量）被清空

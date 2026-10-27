@@ -19,6 +19,7 @@ model Project {
   mode                 String    @default("manual") // manual | auto
   currentStage         String
   status               String    @default("idle") // idle | running | done | failed
+  publicationStatus    String    @default("writing") // writing | published，由作者手动维护
   // 问卷答案（JSON 字符串）：必答 4 项 + 选答 + 类型级联项
   answers              String    @default("{}")
   questionnaireVersion String    @default("v1")
@@ -30,6 +31,8 @@ model Project {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
+  coverState ProjectCoverState?
+  coverAssets CoverAsset[]
   exportSettings BookExportSettings?
   exportSnapshots BookExportSnapshot[]
   exportJobs BookExportJob[]
@@ -47,6 +50,19 @@ model Project {
   beatBook        BeatBook?
 
   @@index([deletedAt])
+}
+
+model AiSettings {
+  id                         String   @id
+  activeProvider             String   @default("deepseek")
+  activeModel                String   @default("deepseek-flash")
+  deepseekKeyCiphertext      String?
+  deepseekKeyNonce           String?
+  deepseekKeyAuthTag         String?
+  glmKeyCiphertext           String?
+  glmKeyNonce                String?
+  glmKeyAuthTag              String?
+  updatedAt                  DateTime @default(now()) @updatedAt
 }
 
 model StageRun {
@@ -450,4 +466,31 @@ model ProseRevision {
 
   @@unique([projectId, requestId])
   @@index([projectId, chapterNumber, createdAt])
+}
+
+// 当前引用保留版本；历史资源不可变，删除后留下清理凭据。
+model ProjectCoverState {
+  projectId String @id
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revision Int @default(0)
+  currentAssetId String?
+  updatedAt DateTime @updatedAt
+}
+
+model CoverAsset {
+  id String @id
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceFormat String
+  mimeType String
+  path String
+  thumbnailPath String
+  width Int
+  height Int
+  size Int
+  sha256 String
+  originalFilename String
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+  @@index([projectId, deletedAt, createdAt])
 }

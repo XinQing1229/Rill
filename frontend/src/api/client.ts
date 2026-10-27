@@ -22,7 +22,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-import type { HealthResponse, PingResponse } from '@rill/shared';
+import type { PingResponse } from '@rill/shared';
 
 export function get<T>(path: string): Promise<T> {
   return request<T>(path);
@@ -32,14 +32,13 @@ export function post<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 }
 
-/** GET /api/health（诊断页） */
-export function getHealth(): Promise<HealthResponse> {
-  return get('/api/health');
-}
-
-/** POST /api/llm/ping（诊断页） */
+/** POST /api/llm/ping（模型设置页） */
 export function pingLlm(): Promise<PingResponse> {
-  return post('/api/llm/ping');
+  return request('/api/llm/ping', {
+    method: 'POST',
+    body: JSON.stringify({}),
+    signal: AbortSignal.timeout(25_000),
+  });
 }
 
 export function patch<T>(path: string, body: unknown): Promise<T> {

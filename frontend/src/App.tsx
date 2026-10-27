@@ -1,50 +1,41 @@
+import { ExportOutlined, PictureOutlined } from '@ant-design/icons';
+import rillLogo from './assets/rill-logo.png';
+import { StageIcon } from './components/StageIcon';
+import './components/AppSidebar.css';
+import './pages/ProjectWorkspacePage.css';
 import { ApiKeySettingsPage } from './pages/ApiKeySettingsPage';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Route, Routes, useLocation, Link } from 'react-router-dom';
-import { STAGE_LABELS, type ProjectDetail, type Stage } from '@rill/shared';
+import {
+  ApiKeySettingsSchema,
+  MODEL_DISPLAY_NAME,
+  STAGE_LABELS,
+  type ProjectDetail,
+  type Stage,
+} from '@rill/shared';
 import { ProjectListPage } from './pages/ProjectListPage';
 import { NewProjectPage } from './pages/NewProjectPage';
 import { ProjectWorkspacePage } from './pages/ProjectWorkspacePage';
-import { HealthCard } from './components/HealthCard';
-import { LlmPingCard } from './components/LlmPingCard';
 import { useProjectCount } from './hooks/useProjectCount';
 import { type WorkspaceView, WorkspaceProjectContext } from './hooks/useWorkspaceProject';
 import { readStageState, timelineStages, type StageState } from './lib/stage';
+import { ModelSettingsContext } from './contexts/ModelSettingsContext';
+import { get } from './api/client';
 
-/** 侧栏阶段状态 pill（深色底配色） */
+/** 阶段状态使用适配浅色侧栏的语义颜色。 */
 function SideStatePill({ state }: { state: StageState | undefined }) {
-  let label = '待生成';
-  let background = 'rgba(255, 255, 255, 0.08)';
-  let color = '#9a9ea6';
-  if (state) {
-    if (state.status === 'generating') {
-      label = '生成中';
-      background = 'rgba(56, 189, 248, 0.16)';
-      color = '#38bdf8';
-    } else if (state.status === 'failed') {
-      label = '失败';
-      background = 'rgba(248, 113, 113, 0.16)';
-      color = '#f87171';
-    } else if (state.status === 'done') {
-      if (state.stale) {
-        label = '已失效';
-        background = 'rgba(251, 191, 36, 0.16)';
-        color = '#fbbf24';
-      } else {
-        label = '已完成';
-        background = 'rgba(52, 199, 110, 0.16)';
-        color = '#4ade80';
-      }
-    }
-  }
-  return (
-    <span className="pill" style={{ background, color }}>
-      {label}
-    </span>
-  );
+  const status = state?.status === 'done' && state.stale ? 'stale' : (state?.status ?? 'pending');
+  const labels = {
+    pending: '待生成',
+    generating: '生成中',
+    failed: '失败',
+    done: '已完成',
+    stale: '已失效',
+  };
+  return <span className={`pill side-state side-state-${status}`}>{labels[status]}</span>;
 }
 
-/** 侧栏阶段条目：圆点 + 键名/中文名 + 状态 pill；点击切换工作台查看的阶段 */
+/** 点击阶段按钮切换工作台；选中状态不改变实际创作进度。 */
 function SideStageItem({
   stage,
   project,
@@ -65,23 +56,18 @@ function SideStageItem({
     .filter(Boolean)
     .join(' ');
   return (
-    <div
+    <button
+      type="button"
       className={cls}
-      role="button"
-      tabIndex={0}
       aria-current={isViewed ? 'true' : undefined}
       onClick={() => onSelect(isCurrent ? null : { kind: 'stage', stage })}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onSelect(isCurrent ? null : { kind: 'stage', stage });
-      }}
     >
-      <span className="dot" />
-      <div className="st-text">
-        <div className="st-key">{stage}</div>
-        <div className="st-name">{STAGE_LABELS[stage]}</div>
-      </div>
+      <StageIcon stage={stage} />
+      <span className="st-text">
+        <span className="st-name">{STAGE_LABELS[stage]}</span>
+      </span>
       <SideStatePill state={state} />
-    </div>
+    </button>
   );
 }
 
@@ -141,7 +127,7 @@ const navIcon = {
       <path d="M8 3.5v9M3.5 8h9" />
     </svg>
   ),
-  refresh: (
+  settings: (
     <svg
       width="16"
       height="16"
@@ -152,47 +138,31 @@ const navIcon = {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M13.5 8a5.5 5.5 0 1 1-1.62-3.9" />
-      <path d="M13.5 2.6v2.7h-2.7" />
+      <path d="M6.55 1.75h2.9l.42 1.68a5 5 0 0 1 1.08.63l1.66-.5 1.45 2.5-1.24 1.22a5 5 0 0 1 0 1.25l1.24 1.22-1.45 2.5-1.66-.5a5 5 0 0 1-1.08.63l-.42 1.67h-2.9l-.42-1.67a5 5 0 0 1-1.08-.63l-1.66.5-1.45-2.5 1.24-1.22a5 5 0 0 1 0-1.25L1.94 6.06l1.45-2.5 1.66.5a5 5 0 0 1 1.08-.63l.42-1.68Z" />
+      <circle cx="8" cy="7.9" r="2.1" />
     </svg>
   ),
 };
 
-const brandMark = (
-  <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-    <defs>
-      <linearGradient id="brand-grad" x1="0" y1="0" x2="26" y2="26" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#4f7cf7" />
-        <stop offset="1" stopColor="#7b5bf0" />
-      </linearGradient>
-    </defs>
-    <rect width="26" height="26" rx="7" fill="url(#brand-grad)" />
-    <path d="M13 6.5 19 10l-6 3.5L7 10z" fill="#fff" />
-    <path
-      d="m7 13.6 6 3.5 6-3.5"
-      stroke="#fff"
-      strokeOpacity=".7"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="m7 17 6 3.5 6-3.5"
-      stroke="#fff"
-      strokeOpacity=".35"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-/** 外壳：深色侧栏 + 白 sheet */
+/** 外壳：统一浅色侧栏 + 白 sheet */
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { count } = useProjectCount(location.pathname);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [viewedStage, setViewedStage] = useState<WorkspaceView | null>(null);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    void get('/api/llm/settings')
+      .then((response) => ApiKeySettingsSchema.parse(response))
+      .then((settings) => {
+        if (mounted) setActiveModel(MODEL_DISPLAY_NAME[settings.activeProvider]);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const contextValue = useMemo(
     () => ({ project, setProject, viewedStage, setViewedStage }),
     [project, viewedStage],
@@ -200,67 +170,93 @@ function Shell({ children }: { children: React.ReactNode }) {
   const selected = useMemo(() => {
     if (location.pathname === '/new') return 'new';
     if (location.pathname === '/settings') return 'settings';
-    if (location.pathname === '/health') return 'health';
     if (location.pathname.startsWith('/projects')) return 'projects';
     return 'projects';
   }, [location.pathname]);
 
   return (
     <WorkspaceProjectContext.Provider value={contextValue}>
-      <div className="shell">
-        <aside className="sidebar">
-          <div className="brand">
-            {brandMark}
-            <span className="word">
-              Rill<small>小说创作</small>
-            </span>
-          </div>
-          <div className="group-label">创作</div>
-          <nav aria-label="主导航">
-            <NavItem to="/" active={selected === 'projects'} label="项目" badge={count}>
-              {navIcon.list}
-            </NavItem>
-            <NavItem to="/new" active={selected === 'new'} label="新建项目">
-              {navIcon.plus}
-            </NavItem>
-          </nav>
-          {project && (
-            <div className="side-group">
-              <div className="group-label">后续阶段</div>
-              <div className="side-stages">
-                {timelineStages(project.stages).map((stage) => (
-                  <SideStageItem
-                    key={stage}
-                    stage={stage}
-                    project={project}
-                    viewedStage={viewedStage}
-                    onSelect={setViewedStage}
-                  />
-                ))}
-                <button
-                  className={`side-stage clickable ${viewedStage?.kind === 'book-export' ? 'viewed' : ''}`}
-                  aria-current={viewedStage?.kind === 'book-export' ? 'page' : undefined}
-                  onClick={() => setViewedStage({ kind: 'book-export' })}
-                >
-                  <span className="dot" />
-                  <span className="st-text">
-                    <span className="st-name">导出书本</span>
-                  </span>
-                </button>
+      <ModelSettingsContext.Provider value={{ activeModel, setActiveModel }}>
+        <div
+          className={`shell${selected === 'new' ? ' shell-new-project' : location.pathname === '/' ? ' shell-project-list' : location.pathname.startsWith('/projects/') ? ' shell-workspace' : ''}`}
+        >
+          <aside className="sidebar">
+            <Link className="brand" to="/" aria-label="Rill 首页">
+              <svg
+                className="brand-logo"
+                width="130"
+                height="54"
+                viewBox="260 287 1020 420"
+                aria-hidden="true"
+              >
+                {/* 通过视口去除原图留白，保留原始 Logo 的比例与细节。 */}
+                <image href={rillLogo} width="1536" height="1024" />
+              </svg>
+            </Link>
+            <div className="group-label">创作</div>
+            <nav aria-label="主导航">
+              <NavItem to="/" active={selected === 'projects'} label="项目" badge={count}>
+                {navIcon.list}
+              </NavItem>
+              <NavItem to="/new" active={selected === 'new'} label="新建项目">
+                {navIcon.plus}
+              </NavItem>
+            </nav>
+            {location.pathname.startsWith('/projects/') && project && (
+              <div className="side-group">
+                <div className="group-label">后续阶段</div>
+                <div className="side-stages">
+                  {timelineStages(project.stages).map((stage) => (
+                    <SideStageItem
+                      key={stage}
+                      stage={stage}
+                      project={project}
+                      viewedStage={viewedStage}
+                      onSelect={setViewedStage}
+                    />
+                  ))}
+                  <button
+                    className={`side-stage clickable cover-nav ${viewedStage?.kind === 'cover' ? 'viewed' : ''}`}
+                    aria-current={viewedStage?.kind === 'cover' ? 'page' : undefined}
+                    onClick={() => setViewedStage({ kind: 'cover' })}
+                  >
+                    <span className="stage-icon" aria-hidden="true">
+                      <PictureOutlined />
+                    </span>
+                    <span className="st-text">
+                      <span className="st-name">封面管理</span>
+                    </span>
+                  </button>
+                  <button
+                    className={`side-stage clickable ${viewedStage?.kind === 'book-export' ? 'viewed' : ''}`}
+                    aria-current={viewedStage?.kind === 'book-export' ? 'page' : undefined}
+                    onClick={() => setViewedStage({ kind: 'book-export' })}
+                  >
+                    <span className="stage-icon" aria-hidden="true">
+                      <ExportOutlined />
+                    </span>
+                    <span className="st-text">
+                      <span className="st-name">导出书本</span>
+                    </span>
+                  </button>
+                </div>
               </div>
+            )}
+            <div className="bottom">
+              {activeModel && (
+                <div className="current-model" aria-label={`当前使用 ${activeModel} 模型`}>
+                  <span>当前使用</span>
+                  <strong>{activeModel}</strong>
+                </div>
+              )}
+              <NavItem to="/settings" active={selected === 'settings'} label="模型设置">
+                {navIcon.settings}
+              </NavItem>
             </div>
-          )}
-          <div className="bottom">
-            <NavItem to="/settings" active={selected === 'settings'} label="API Key 设置">
-              {navIcon.refresh}
-            </NavItem>
-            <NavItem to="/health" active={selected === 'health'} label="诊断">
-              {navIcon.refresh}
-            </NavItem>
-          </div>
-        </aside>
-        <main className="sheet">{children}</main>
-      </div>
+          </aside>
+          <main className="sheet">{children}</main>
+        </div>
+      </ModelSettingsContext.Provider>
     </WorkspaceProjectContext.Provider>
   );
 }
@@ -291,23 +287,6 @@ export default function App() {
         <Route path="/settings" element={<ApiKeySettingsPage />} />
         <Route path="/new" element={<NewProjectPage />} />
         <Route path="/projects/:id" element={<ProjectWorkspacePage />} />
-        <Route
-          path="/health"
-          element={
-            <div className="page">
-              <div className="title-row">
-                <div>
-                  <h1>诊断</h1>
-                  <div className="sub">AI 基建与健康检查</div>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gap: 16, maxWidth: 420 }}>
-                <HealthCard />
-                <LlmPingCard />
-              </div>
-            </div>
-          }
-        />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Shell>

@@ -205,7 +205,7 @@ describe('StagePanel 状态分流', () => {
         onRollback={noop}
       />,
     );
-    expect(screen.getByText('关系网')).toBeInTheDocument();
+    expect(screen.queryByText('关系网')).not.toBeInTheDocument();
     expect(screen.getByText('裴烈')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '确认并推进' })).toBeInTheDocument();
   });

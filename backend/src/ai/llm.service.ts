@@ -1,13 +1,14 @@
 import { executionContext } from '../novel/pipeline/execution-context.js';
-import { BadGatewayException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { AI_CONFIG, AiConfig, ModelUsage } from './config/ai.config.js';
+import { z } from 'zod';
+import { BadGatewayException, Inject, Injectable, Logger } from '@nestjs/common';
+import { AI_CONFIG, AiConfig } from './config/ai.config.js';
 import { ModelRegistry } from './models/model.registry.js';
 import { PromptRegistry } from './prompts/prompt.registry.js';
 import { sampleBookV1 } from './prompts/templates/sample-book.js';
 import { UsageRecorder } from './observability/usage-recorder.js';
 import { newTraceId } from './observability/trace.js';
 import { createLlmCallGraph } from './graphs/llm-call.graph.js';
-import { BudgetExceededError } from './errors/error-classifier.js';
+import { BudgetExceededError, isOutputParseError } from './errors/error-classifier.js';
 import type {
   ChatMessage,
   CompleteOptions,
@@ -25,7 +26,7 @@ function reasonOf(error: unknown): string {
 }
 
 @Injectable()
-export class LlmService implements OnModuleInit {
+export class LlmService {
   private readonly logger = new Logger(LlmService.name);
 
   constructor(
@@ -35,16 +36,6 @@ export class LlmService implements OnModuleInit {
     private readonly usage: UsageRecorder,
   ) {
     this.prompts.register(sampleBookV1);
-  }
-
-  onModuleInit(): void {
-    if (!this.config.apiKey) {
-      this.logger.warn('DEEPSEEK_API_KEY 未配置，LLM 功能暂不可用（服务正常启动）');
-    }
-  }
-
-  hasApiKey(): boolean {
-    return Boolean(this.config.apiKey);
   }
 
   /** 渲染已注册的提示词模板 */
@@ -57,18 +48,19 @@ export class LlmService implements OnModuleInit {
     options: CompleteOptions = {},
   ): Promise<CompletionResult> {
     const traceId = options.traceId ?? newTraceId();
-    const usageKind: ModelUsage = options.usage ?? 'draft';
+    const signal = options.signal ?? executionContext.getStore()?.signal;
+    const runWithRetry = this.retryRunner(signal);
     // 输出上限必须用于构造模型，当前 SDK 会忽略 invoke 中的 maxTokens。
-    const resolved = this.registry.resolve(usageKind, {
+    const resolved = this.registry.resolve({
       ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
     });
 
     try {
-      const response = await this.runWithRetry(traceId, () =>
+      const response = await runWithRetry(() =>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolved.model.invoke(messages as any, {
-          signal: options.signal ?? executionContext.getStore()?.signal,
-          callbacks: [this.usage.callbacks(traceId, resolved.modelName)],
+          signal,
+          callbacks: [this.usage.callbacks(traceId, resolved.modelName, resolved.provider)],
         }),
       );
 
@@ -80,7 +72,6 @@ export class LlmService implements OnModuleInit {
         model: resolved.modelName,
         content: message?.content ?? '',
         finishReason: message?.response_metadata?.finish_reason,
-        reasoning: message?.additional_kwargs?.reasoning_content || undefined,
         usage: tokenUsage
           ? {
               promptTokens: tokenUsage.input_tokens ?? 0,
@@ -89,7 +80,6 @@ export class LlmService implements OnModuleInit {
             }
           : undefined,
         traceId,
-        usageKind,
       };
     } finally {
       this.logUsage(traceId);
@@ -98,7 +88,7 @@ export class LlmService implements OnModuleInit {
 
   /**
    * 结构化生成：按 schema 校验输出，失败时回喂错误修复重试。
-   * 结构化生成一律关闭思维链（避免推理占用输出预算）。
+   * DeepSeek 关闭思考，GLM-5.3 保留其必需的思考并限制推理强度。
    */
   async completeStructured<T>(
     schema: AnySchema,
@@ -106,13 +96,20 @@ export class LlmService implements OnModuleInit {
     options: StructuredOptions = {},
   ): Promise<T> {
     const traceId = options.traceId ?? newTraceId();
-    const usageKind: ModelUsage = options.usage ?? 'draft';
+    const signal = options.signal ?? executionContext.getStore()?.signal;
+    // 修复循环与网络重试共享同一个预算。
+    const runWithRetry = this.retryRunner(signal);
     // maxTokens 必须落在模型构造参数上：invoke 选项中的 maxTokens 会被 ChatDeepSeek 忽略
-    const resolved = this.registry.resolve(usageKind, {
-      thinking: false,
+    const resolved = this.registry.resolve({
       ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
     });
-    const runnable = resolved.model.withStructuredOutput(schema);
+    // 联合类型的 JSON Schema 根节点只有 anyOf/oneOf，DeepSeek 工具参数要求根节点为 object。
+    // 仅在传输层包装，解包后仍按原始契约校验，业务调用方无需改变返回结构。
+    const wrapped = schema instanceof z.ZodUnion;
+    const runnable = resolved.model.withStructuredOutput(
+      wrapped ? z.object({ result: schema }) : schema,
+      { method: 'functionCalling' },
+    );
 
     const maxRepairAttempts = options.maxRepairAttempts ?? this.config.structured.maxRepairAttempts;
     let currentMessages: ChatMessage[] = messages;
@@ -120,14 +117,14 @@ export class LlmService implements OnModuleInit {
 
     try {
       for (let attempt = 0; attempt <= maxRepairAttempts; attempt += 1) {
+        let truncated = false;
         try {
-          let truncated = false;
-          const result = await this.runWithRetry(traceId, () =>
+          const result = await runWithRetry(() =>
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             runnable.invoke(currentMessages as any, {
-              signal: options.signal ?? executionContext.getStore()?.signal,
+              signal,
               callbacks: [
-                this.usage.callbacks(traceId, resolved.modelName),
+                this.usage.callbacks(traceId, resolved.modelName, resolved.provider),
                 {
                   handleLLMEnd: (output: unknown) => {
                     const result = output as {
@@ -156,9 +153,13 @@ export class LlmService implements OnModuleInit {
           if (options.rejectTruncated && truncated)
             throw new BadGatewayException('正文修改输出被截断，请重试');
           // 在修复循环内校验，确保数量、长度等生成约束失败后也能回喂重试。
-          return schema.parse(result) as T;
+          return schema.parse(wrapped ? (result as { result: unknown }).result : result) as T;
         } catch (error) {
           lastError = error;
+          signal?.throwIfAborted();
+          // 仅修复输出：网络、认证、限流等错误已由统一重试处理。
+          if (!isOutputParseError(error) && !(error instanceof z.ZodError) && !truncated)
+            throw error;
           if (attempt === maxRepairAttempts) break;
           currentMessages = [
             ...currentMessages,
@@ -188,21 +189,22 @@ export class LlmService implements OnModuleInit {
    * 经 LangGraph 节点重试执行单次调用，并受总调用预算约束——
    * 避免内层修复重试与外层节点重试叠加导致调用次数失控。
    */
-  private async runWithRetry<T>(traceId: string, call: () => Promise<T>): Promise<T> {
+  private retryRunner(signal?: AbortSignal) {
     const budget = this.config.budget.maxCallsPerRequest;
     let calls = 0;
 
-    const guarded = async (): Promise<T> => {
-      if (calls >= budget) {
-        throw new BudgetExceededError(budget);
-      }
-      calls += 1;
-      return call();
-    };
+    return async <T>(call: () => Promise<T>): Promise<T> => {
+      const guarded = async (): Promise<T> => {
+        signal?.throwIfAborted();
+        if (calls >= budget) throw new BudgetExceededError(budget);
+        calls += 1;
+        return call();
+      };
 
-    const graph = createLlmCallGraph(this.config.retry);
-    const output = await graph.invoke({ call: guarded, result: undefined });
-    return output.result as T;
+      const graph = createLlmCallGraph(this.config.retry);
+      const output = await graph.invoke({ call: guarded, result: undefined }, { signal });
+      return output.result as T;
+    };
   }
 
   /** 汇总日志：不含 API key，完整 prompt 默认不记录 */

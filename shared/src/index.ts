@@ -38,9 +38,44 @@ export const GENRES = [
   'lishi',
   'kehuan',
   'yanqing',
+  'xianxia',
+  'chaogu',
+  'chuanyue',
+  'cthulhu',
   'other',
 ] as const;
 export type Genre = (typeof GENRES)[number];
+
+/** 兼容旧项目单选；新建项目使用非空、无重复的类型数组。 */
+export const GenreSelectionSchema = z.union([
+  z.enum(GENRES),
+  z
+    .array(z.enum(GENRES))
+    .min(1, '请至少选择一个类型')
+    .refine((genres) => new Set(genres).size === genres.length, '类型不能重复'),
+]);
+export type GenreSelection = z.infer<typeof GenreSelectionSchema>;
+
+/** SQLite String 字段兼容旧枚举值与新 JSON 数组。 */
+export function parseStoredGenre(value: string): GenreSelection {
+  return GenreSelectionSchema.parse(value.startsWith('[') ? JSON.parse(value) : value);
+}
+
+export function selectedGenres(value: GenreSelection): Genre[] {
+  return Array.isArray(value) ? value : [value];
+}
+
+/** 新建项目可选类型；other、lishi、kehuan 仅保留已有项目兼容。 */
+export const SELECTABLE_GENRES = [
+  'dushi',
+  'xuanhuan',
+  'xianxia',
+  'chuanyue',
+  'xuanyi',
+  'yanqing',
+  'chaogu',
+  'cthulhu',
+] as const satisfies readonly Genre[];
 
 export const LENGTHS = ['short'] as const;
 export type StoryLength = (typeof LENGTHS)[number];
@@ -75,7 +110,7 @@ export const DEFAULT_WRITING_STYLE: WritingStyleSelection = {
 /** 问卷答案（必答 3 项 + 选答 + 类型级联项） */
 export interface QuestionnaireAnswers {
   /** 必答 */
-  genre: Genre;
+  genre: GenreSelection;
   /** 必答 */
   length: StoryLength;
   /** 仅用于读取历史项目的阅读体验 */
@@ -99,7 +134,7 @@ export const REQUIRED_ANSWER_FIELDS = ['genre', 'length', 'pov'] as const;
 
 /** 问卷答案的结构校验（genre/length 为结构性枚举，必须精确匹配） */
 export const QuestionnaireAnswersSchema = z.object({
-  genre: z.enum(GENRES),
+  genre: GenreSelectionSchema,
   length: z.enum(LENGTHS),
   tone: z.string().optional(),
   pov: z.string().min(1, '叙事视角不能为空'),
@@ -423,9 +458,12 @@ export const CUSTOM_WORLD_SCHEMAS = {
 export type WorldGenre = keyof typeof CUSTOM_WORLD_SCHEMAS;
 
 /** 按类型合并出完整的世界观 schema（通用骨架 + 自定义块） */
-export function worldSchemaFor(genre: string) {
-  const custom = CUSTOM_WORLD_SCHEMAS[genre as WorldGenre];
-  return z.object({ ...GenericWorldSchema.shape, ...(custom ? custom.shape : {}) });
+export function worldSchemaFor(genre: GenreSelection) {
+  const shape: z.ZodRawShape = {};
+  for (const item of selectedGenres(genre)) {
+    Object.assign(shape, CUSTOM_WORLD_SCHEMAS[item as WorldGenre]?.shape ?? {});
+  }
+  return z.object({ ...GenericWorldSchema.shape, ...shape });
 }
 
 /** 人物卡 */
@@ -486,6 +524,20 @@ export interface StageContext {
 export const PROJECT_STATUSES = ['idle', 'running', 'done', 'failed'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
+/** 发布状态由作者手动维护，与流水线执行状态独立 */
+export const PublicationStatusSchema = z.enum(['writing', 'published']);
+export type PublicationStatus = z.infer<typeof PublicationStatusSchema>;
+export const PUBLICATION_STATUS_LABELS: Record<PublicationStatus, string> = {
+  writing: '创作中',
+  published: '已发布',
+};
+export const SetPublicationStatusBodySchema = z
+  .object({
+    publicationStatus: PublicationStatusSchema,
+  })
+  .strict();
+export type SetPublicationStatusBody = z.infer<typeof SetPublicationStatusBodySchema>;
+
 /** 阶段中文名（前后端展示共用） */
 export const STAGE_LABELS: Record<Stage, string> = {
   premise: '种子',
@@ -504,8 +556,19 @@ export const GENRE_LABELS: Record<Genre, string> = {
   lishi: '历史',
   kehuan: '科幻',
   yanqing: '言情',
+  xianxia: '仙侠',
+  chaogu: '炒股',
+  chuanyue: '穿越',
+  cthulhu: '克苏鲁神话',
   other: '其他',
 };
+
+/** 多选类型的统一展示文案。 */
+export function genreLabel(genre: GenreSelection): string {
+  return selectedGenres(genre)
+    .map((item) => GENRE_LABELS[item])
+    .join('、');
+}
 
 /** 篇幅中文名（展示用） */
 export const LENGTH_LABELS: Record<StoryLength, string> = {
@@ -587,17 +650,19 @@ export interface StageExecutionState {
 }
 
 export interface ProjectDetail {
+  cover?: { assetId: string; revision: number } | null;
   outlineProgress?: OutlineProgress | null;
   stageStates?: Partial<Record<Stage, StageExecutionState>>;
   id: string;
   title: string;
   /** 历史客户端可忽略的书名来源 */
   titleSource?: ProjectTitleSource;
-  genre: Genre;
+  genre: GenreSelection;
   length: StoryLength;
   mode: PipelineMode;
   currentStage: Stage;
   status: ProjectStatus;
+  publicationStatus: PublicationStatus;
   /** 该类型的完整阶段列表（含跳过的阶段），由后端 stagesFor 计算 */
   stages: Stage[];
   /** 问卷答案 JSON 字符串，按 QuestionnaireAnswers 解析 */
@@ -617,13 +682,15 @@ export interface ProjectDetail {
 
 /** GET /api/novel/projects 列表项（按更新时间倒序） */
 export interface ProjectSummary {
+  cover?: { assetId: string; revision: number } | null;
   id: string;
   title: string;
-  genre: Genre;
+  genre: GenreSelection;
   length: StoryLength;
   mode: PipelineMode;
   currentStage: Stage;
   status: ProjectStatus;
+  publicationStatus: PublicationStatus;
   createdAt: string;
   updatedAt: string;
   /** 软删除时刻：非空表示该项目已移入回收站 */
@@ -967,6 +1034,58 @@ export type ProseDetail = z.infer<typeof ProseDetailSchema>;
 export type ConfirmProseBody = z.infer<typeof ConfirmProseBodySchema>;
 export type OverrideProseReviewBody = z.infer<typeof OverrideProseReviewBodySchema>;
 
+// ---------------- 项目封面：当前引用、历史资源与操作契约 ----------------
+export const COVER_MAX_BYTES = 10_000_000;
+/** 后端接受的原始图片格式；WebP 规范化后转存为 PNG。 */
+export const COVER_SOURCE_FORMATS = ['jpeg', 'png', 'webp'] as const;
+/** 上传入口接受的 MIME 类型，与 COVER_SOURCE_FORMATS 一一对应。 */
+export const COVER_SOURCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const COVER_MAX_EDGE_PX = 8192;
+export const COVER_MAX_TOTAL_PIXELS = 24_000_000;
+export const COVER_HISTORY_PAGE_SIZE = 12;
+/** 前后端共用的拒绝文案，避免两侧各写一份而漂移。 */
+export const COVER_TOO_LARGE_MESSAGE = '封面不能超过 10 MB';
+export const COVER_FORMAT_MESSAGE = '请选择 JPG、PNG 或 WebP 图片';
+export const COVER_DIMENSION_MESSAGE = '图片尺寸超限，最长边不超过 8192 像素、总像素不超过 2400 万';
+export const CoverAssetSchema = z.object({
+  id: z.string(),
+  mimeType: z.enum(['image/jpeg', 'image/png']),
+  sourceFormat: z.enum(COVER_SOURCE_FORMATS),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  size: z.number().int().positive(),
+  originalFilename: z.string(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  createdAt: z.string(),
+  fileStatus: z.enum(['available', 'missing', 'corrupt']),
+});
+export type CoverAsset = z.infer<typeof CoverAssetSchema>;
+export const ProjectCoverStateSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  currentCover: CoverAssetSchema.nullable(),
+});
+export type ProjectCoverState = z.infer<typeof ProjectCoverStateSchema>;
+export const CoverHistoryPageSchema = z.object({
+  items: z.array(CoverAssetSchema.extend({ isCurrent: z.boolean() })),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.literal(COVER_HISTORY_PAGE_SIZE),
+});
+export type CoverHistoryPage = z.infer<typeof CoverHistoryPageSchema>;
+export const CoverRevisionSchema = z.object({
+  expectedRevision: z.coerce.number().int().nonnegative(),
+});
+export const ActivateCoverSchema = CoverRevisionSchema.extend({ assetId: z.string().min(1) });
+export const DeleteCurrentCoverSchema = ActivateCoverSchema;
+export const BookCoverSnapshotSchema = z.object({
+  path: z.enum(['snapshot/cover/cover.jpg', 'snapshot/cover/cover.png']),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  mimeType: z.enum(['image/jpeg', 'image/png']),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+export type BookCoverSnapshot = z.infer<typeof BookCoverSnapshotSchema>;
+
 // ---------------- 书本交付：配置、快照与独立任务 ----------------
 export const BookFormatSchema = z.enum(['txt', 'markdown', 'epub']);
 export type BookFormat = z.infer<typeof BookFormatSchema>;
@@ -1026,8 +1145,9 @@ export const BookDocumentSchema = z.object({
 });
 export type BookDocument = z.infer<typeof BookDocumentSchema>;
 export const BookManifestSchema = z.object({
-  version: z.literal(1),
-  rendererVersion: z.literal('v1'),
+  version: z.union([z.literal(1), z.literal(2)]),
+  rendererVersion: z.enum(['v1', 'v2']),
+  cover: BookCoverSnapshotSchema.nullable().optional(),
   metadata: BookMetadataSchema,
   contentFingerprint: ProseHashSchema,
   evidenceFingerprint: ProseHashSchema,
@@ -1041,6 +1161,7 @@ export const BookPreviewBodySchema = z.object({
   previewToken: ProseHashSchema.optional(),
 });
 export const BookPreviewSchema = z.object({
+  cover: CoverAssetSchema.nullable().optional(),
   metadata: BookMetadataSchema,
   chapters: z.array(
     z.object({ chapterNumber: ProseChapterNumberSchema, title: z.string(), accepted: z.boolean() }),
@@ -1098,17 +1219,36 @@ export const BookJobListSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 
-/** Web 模型设置查询不包含密钥本身。 */
+export const ModelProviderSchema = z.enum(['deepseek', 'glm']);
+export type ModelProvider = z.infer<typeof ModelProviderSchema>;
+/** 服务商展示名，前后端共用一份，避免与服务商标识各自定义造成漂移。 */
+export const MODEL_DISPLAY_NAME: Record<ModelProvider, string> = {
+  deepseek: 'Deepseek-V4.1-Flash',
+  glm: 'GLM-5.3',
+};
+
+/** 模型设置查询不包含密钥本身，只暴露是否配置及有效来源。 */
 export const ApiKeySettingsSchema = z.strictObject({
-  hasApiKey: z.boolean(),
-  baseUrl: z.string(),
-  draftModel: z.string(),
-  reasoningModel: z.string(),
+  activeProvider: ModelProviderSchema,
+  activeModel: z.string().min(1),
+  providers: z.strictObject({
+    deepseek: z.strictObject({
+      model: z.string().min(1),
+      hasUserKey: z.boolean(),
+      keySource: z.enum(['user', 'env', 'none']),
+    }),
+    glm: z.strictObject({
+      model: z.string().min(1),
+      hasUserKey: z.boolean(),
+      keySource: z.enum(['user', 'env', 'none']),
+    }),
+  }),
 });
 export type ApiKeySettings = z.infer<typeof ApiKeySettingsSchema>;
 export const ApiKeyUpdateSchema = z.discriminatedUnion('action', [
   z.strictObject({
-    action: z.literal('replace'),
+    action: z.literal('replace-key'),
+    provider: ModelProviderSchema,
     apiKey: z
       .string()
       .trim()
@@ -1116,6 +1256,11 @@ export const ApiKeyUpdateSchema = z.discriminatedUnion('action', [
       .max(4096)
       .regex(/^[A-Za-z0-9._-]+$/, 'API Key 格式不正确'),
   }),
-  z.strictObject({ action: z.literal('remove') }),
+  z.strictObject({ action: z.literal('remove-key'), provider: ModelProviderSchema }),
+  z.strictObject({
+    action: z.literal('select-model'),
+    provider: ModelProviderSchema,
+    model: z.string().min(1).max(100),
+  }),
 ]);
 export type ApiKeyUpdate = z.infer<typeof ApiKeyUpdateSchema>;

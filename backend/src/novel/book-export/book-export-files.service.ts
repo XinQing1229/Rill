@@ -71,7 +71,13 @@ export class BookExportFilesService {
     manifest: Omit<BookManifest, 'chapters'>,
     docs: BookDocument[],
     guard: () => Promise<void>,
+    cover?: Buffer,
   ) {
+    if (manifest.cover) {
+      if (!cover || bytesHash(cover) !== manifest.cover.sha256)
+        throw new ConflictException('封面快照不匹配');
+      await this.write(projectId, jobId, manifest.cover.path, cover, guard);
+    }
     const chapters = [];
     for (const doc of docs) {
       await this.write(
@@ -119,7 +125,10 @@ export class BookExportFilesService {
         throw new ConflictException('快照正文损坏');
       docs.push(doc);
     }
-    return { manifest, docs };
+    const cover = manifest.cover ? await this.read(projectId, jobId, manifest.cover.path) : null;
+    if (manifest.cover && (!cover || bytesHash(cover) !== manifest.cover.sha256))
+      throw new ConflictException('快照封面损坏');
+    return { manifest, docs, cover };
   }
   async remove(projectId: string, jobId: string) {
     await rm(await this.path(projectId, jobId), { recursive: true, force: true });

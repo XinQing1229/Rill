@@ -1,5 +1,7 @@
+import { CoverService } from '../cover/cover.service.js';
 import {
   ConflictException,
+  Optional,
   Injectable,
   NotFoundException,
   OnModuleInit,
@@ -41,6 +43,7 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly content: ProseContentService,
     private readonly files: BookExportFilesService,
+    @Optional() private readonly covers?: CoverService,
   ) {}
   async project(id: string) {
     const p = await this.prisma.project.findFirst({ where: { id, deletedAt: null } });
@@ -148,6 +151,17 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
     if (!metadata.title.trim())
       diagnostics.push({ code: 'TITLE_REQUIRED', message: '请填写并保存成书书名' });
     if (!result.target) diagnostics.push({ code: 'NO_CHAPTERS', message: '请先完成大纲与正文' });
+    let coverData: Awaited<ReturnType<CoverService['currentImage']>> = { revision: 0, cover: null };
+    if (this.covers) {
+      try {
+        coverData = await this.covers.currentImage(id);
+      } catch {
+        diagnostics.push({
+          code: 'COVER_UNAVAILABLE',
+          message: '封面不可用，请重新上传、切换历史封面或删除',
+        });
+      }
+    }
     const contentFingerprint = proseHash(
       JSON.stringify({
         metadata: {
@@ -156,7 +170,8 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
           introduction: metadata.introduction,
         },
         chapters: docs.map((d) => [d.chapterNumber, d.title, d.sourceHash]),
-        renderer: 'v1',
+        renderer: coverData.cover ? 'v2' : 'v1',
+        ...(coverData.cover ? { cover: coverData.cover.asset.sha256 } : {}),
       }),
     );
     const evidenceFingerprint = proseHash(
@@ -165,6 +180,7 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
     const previewToken = proseHash(JSON.stringify([contentFingerprint, evidenceFingerprint]));
     return {
       ...result,
+      coverData,
       settings,
       metadata,
       docs,
@@ -180,6 +196,7 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException('预览已过期，请重新预览');
     return BookPreviewSchema.parse({
       metadata: p.metadata,
+      cover: p.coverData.cover?.asset ?? null,
       chapters: p.chapters.map((c) => ({
         chapterNumber: c.chapterNumber,
         title: p.docs.find((d) => d.chapterNumber === c.chapterNumber)?.title ?? c.title,
@@ -198,6 +215,7 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
     const blockers = p.diagnostics.filter(
       (d) =>
         d.code !== 'TITLE_REQUIRED' &&
+        d.code !== 'COVER_UNAVAILABLE' &&
         (d.code === 'CHAPTER_NOT_ACCEPTED' || d.chapterNumber === number) &&
         (mode !== 'markdown-source' ||
           !['UNSUPPORTED_MARKDOWN', 'UNSAFE_LINK', 'AMBIGUOUS_TITLE', 'TITLE_NEEDS_CHECK'].includes(
@@ -359,60 +377,82 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
     const guard = () => this.guard(jobId, token);
     try {
       if (!job.snapshot) {
-        const p = await this.prepare(job.projectId);
-        if (p.diagnostics.length || p.previewToken !== job.previewToken)
-          throw new ConflictException(
-            p.diagnostics.map((d) => d.message).join('；') || '预览已过期，请重新发起',
-          );
-        const file = await this.files.snapshot(
-          job.projectId,
-          job.id,
-          {
-            version: 1,
-            rendererVersion: 'v1',
-            metadata: p.metadata,
-            contentFingerprint: p.contentFingerprint,
-            evidenceFingerprint: p.evidenceFingerprint,
-          },
-          p.docs,
-          guard,
-        );
-        await this.prisma.$transaction(async (tx) => {
-          const state = await this.content.state(job.projectId, tx);
-          const saved = await tx.bookExportSettings.findUnique({
-            where: { projectId: job.projectId },
-          });
-          if (
-            this.content.fingerprint(state) !== p.stateFingerprint ||
-            (saved?.revision ?? 0) !== p.settings.revision
-          )
-            throw new ConflictException('准备期间正文证据或成书配置已变化');
-          const owned = await tx.bookExportJob.findFirst({
-            where: { id: jobId, token, status: 'preparing' },
-          });
-          if (!owned) throw new ConflictException('任务已暂停或删除');
-          const snapshot = await tx.bookExportSnapshot.create({
-            data: {
-              projectId: job.projectId,
+        const prepareSnapshot = async () => {
+          const p = await this.prepare(job.projectId);
+          if (p.diagnostics.length || p.previewToken !== job.previewToken)
+            throw new ConflictException(
+              p.diagnostics.map((d) => d.message).join('；') || '预览已过期，请重新发起',
+            );
+          const file = await this.files.snapshot(
+            job.projectId,
+            job.id,
+            {
+              version: 2,
+              rendererVersion: 'v2',
+              cover: p.coverData.cover
+                ? {
+                    path:
+                      p.coverData.cover.row.mimeType === 'image/jpeg'
+                        ? 'snapshot/cover/cover.jpg'
+                        : 'snapshot/cover/cover.png',
+                    sha256: p.coverData.cover.asset.sha256,
+                    mimeType: p.coverData.cover.asset.mimeType,
+                    width: p.coverData.cover.asset.width,
+                    height: p.coverData.cover.asset.height,
+                  }
+                : null,
+              metadata: p.metadata,
               contentFingerprint: p.contentFingerprint,
               evidenceFingerprint: p.evidenceFingerprint,
-              manifestPath: file.path,
-              manifestHash: file.hash,
-              title: p.metadata.title,
-              chapterCount: p.docs.length,
             },
+            p.docs,
+            guard,
+            p.coverData.cover?.data,
+          );
+          await this.prisma.$transaction(async (tx) => {
+            const state = await this.content.state(job.projectId, tx);
+            const saved = await tx.bookExportSettings.findUnique({
+              where: { projectId: job.projectId },
+            });
+            if (
+              this.content.fingerprint(state) !== p.stateFingerprint ||
+              (saved?.revision ?? 0) !== p.settings.revision
+            )
+              throw new ConflictException('准备期间正文证据或成书配置已变化');
+            const coverState = await tx.projectCoverState.findUnique({
+              where: { projectId: job.projectId },
+            });
+            if ((coverState?.revision ?? 0) !== p.coverData.revision)
+              throw new ConflictException('准备期间封面已变化，请重新预览');
+            const owned = await tx.bookExportJob.findFirst({
+              where: { id: jobId, token, status: 'preparing' },
+            });
+            if (!owned) throw new ConflictException('任务已暂停或删除');
+            const snapshot = await tx.bookExportSnapshot.create({
+              data: {
+                projectId: job.projectId,
+                contentFingerprint: p.contentFingerprint,
+                evidenceFingerprint: p.evidenceFingerprint,
+                manifestPath: file.path,
+                manifestHash: file.hash,
+                title: p.metadata.title,
+                chapterCount: p.docs.length,
+              },
+            });
+            await tx.bookExportJob.update({
+              where: { id: jobId },
+              data: { snapshotId: snapshot.id, status: 'generating' },
+            });
           });
-          await tx.bookExportJob.update({
+          job = await this.prisma.bookExportJob.findUniqueOrThrow({
             where: { id: jobId },
-            data: { snapshotId: snapshot.id, status: 'generating' },
+            include: jobInclude,
           });
-        });
-        job = await this.prisma.bookExportJob.findUniqueOrThrow({
-          where: { id: jobId },
-          include: jobInclude,
-        });
+        };
+        if (this.covers) await this.covers.locked(job.projectId, prepareSnapshot);
+        else await prepareSnapshot();
       }
-      const { manifest, docs } = await this.files.load(
+      const { manifest, docs, cover } = await this.files.load(
         job.projectId,
         job.id,
         job.snapshot!.manifestHash,
@@ -435,6 +475,7 @@ export class BookExportService implements OnModuleInit, OnModuleDestroy {
             manifest.metadata,
             docs,
             manifest.contentFingerprint,
+            cover ? { data: cover, mimeType: manifest.cover!.mimeType } : undefined,
           );
           const published = await this.files.write(
             job.projectId,

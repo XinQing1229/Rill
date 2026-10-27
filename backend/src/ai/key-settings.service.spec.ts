@@ -1,69 +1,104 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+const jest = import.meta.jest;
+
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parse as parseEnv } from 'dotenv';
-import configuration from '../config/configuration.js';
-import { parseAiConfig, type AiConfig } from './config/ai.config.js';
-import { KeySettingsService } from './key-settings.service.js';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ApiKeyUpdateSchema } from '@rill/shared';
+import { makeAiConfig } from '../../test/ai-config-fixture.js';
+import { KeySettingsService } from './key-settings.service.js';
 
-describe('Web API Key 设置', () => {
+describe('模型设置与 API Key 解析', () => {
   let directory: string;
-  let path: string;
-  let config: AiConfig;
+  let envPath: string;
+  let stored: Record<string, unknown> | null;
   let service: KeySettingsService;
-  const previousKey = process.env.DEEPSEEK_API_KEY;
+  let config: ReturnType<typeof makeAiConfig>;
+  const previousEncryptionKey = process.env.LLM_CREDENTIAL_ENCRYPTION_KEY;
+
+  function createService() {
+    stored = null;
+    const prisma = {
+      aiSettings: {
+        findUnique: jest.fn(async () => stored),
+        upsert: jest.fn(async ({ create, update }: { create: object; update: object }) => {
+          stored = stored ? { ...stored, ...update } : { ...create };
+          return stored;
+        }),
+      },
+    };
+    service = new KeySettingsService(config, envPath, prisma as never);
+  }
+
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'rill-key-settings-'));
-    path = join(directory, '.env');
-    config = parseAiConfig(configuration().llm);
-    config.apiKey = 'old-key';
-    service = new KeySettingsService(config, path);
+    directory = await mkdtemp(join(tmpdir(), 'rill-model-settings-'));
+    envPath = join(directory, '.env');
+    config = makeAiConfig();
+    createService();
+    await service.onModuleInit();
   });
+
   afterEach(async () => {
-    if (previousKey === undefined) delete process.env.DEEPSEEK_API_KEY;
-    else process.env.DEEPSEEK_API_KEY = previousKey;
+    if (previousEncryptionKey === undefined) delete process.env.LLM_CREDENTIAL_ENCRYPTION_KEY;
+    else process.env.LLM_CREDENTIAL_ENCRYPTION_KEY = previousEncryptionKey;
     await rm(directory, { recursive: true, force: true });
   });
-  it('查询不回显密钥，保存保留其他环境配置且立即生效、重启可读取', async () => {
-    await writeFile(path, '# 用户配置\nPORT=3000\nDEEPSEEK_API_KEY="old-key"\n');
-    expect(JSON.stringify(service.state())).not.toContain('old-key');
-    const result = await service.update({ action: 'replace', apiKey: 'sk-new-test-key' });
-    expect(result.hasApiKey).toBe(true);
-    expect(JSON.stringify(result)).not.toContain('sk-new-test-key');
-    expect(config.apiKey).toBe('sk-new-test-key');
-    const contents = await readFile(path, 'utf8');
-    expect(contents).toContain('# 用户配置\nPORT=3000');
-    expect(parseEnv(contents).DEEPSEEK_API_KEY).toBe('sk-new-test-key');
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+
+  it('用户 Key 加密保存，不进入环境文件或查询结果', async () => {
+    const apiKey = 'glm.user-key-123';
+    const result = await service.update({ action: 'replace-key', provider: 'glm', apiKey });
+
+    expect(result.providers.glm.keySource).toBe('user');
+    expect(service.active().provider).toBe('deepseek');
+    expect(stored).not.toBeNull();
+    expect(JSON.stringify(stored)).not.toContain(apiKey);
+    expect(JSON.stringify(result)).not.toContain(apiKey);
+    expect(await readFile(envPath, 'utf8')).not.toContain(apiKey);
   });
-  it('清除持久化空密钥且不删除其他设置', async () => {
-    await writeFile(path, 'PORT=3000\n');
-    expect((await service.update({ action: 'remove' })).hasApiKey).toBe(false);
-    expect(parseEnv(await readFile(path, 'utf8'))).toEqual({ PORT: '3000', DEEPSEEK_API_KEY: '' });
-    expect(config.apiKey).toBe('');
+
+  it('优先使用用户设置 Key，缺省时使用同服务商环境 Key', async () => {
+    config.providers.deepseek.apiKey = 'deepseek-env-key';
+    createService();
+    await service.onModuleInit();
+    expect(service.state().providers.deepseek.keySource).toBe('env');
+    expect(service.active().apiKey).toBe('deepseek-env-key');
+
+    await service.update({
+      action: 'replace-key',
+      provider: 'deepseek',
+      apiKey: 'deepseek-user-key',
+    });
+    expect(service.active().apiKey).toBe('deepseek-user-key');
   });
-  it('写失败不改变已生效密钥且不泄露输入', async () => {
-    service = new KeySettingsService(config, join(directory, 'missing', '.env'));
-    await expect(service.update({ action: 'replace', apiKey: 'sk-do-not-leak' })).rejects.toThrow(
-      'API Key 保存失败',
-    );
-    expect(config.apiKey).toBe('old-key');
+
+  it('清除用户 Key 后回退到同服务商环境 Key，并保存模型选择', async () => {
+    config.providers.glm.apiKey = 'glm-env-key';
+    createService();
+    await service.onModuleInit();
+    await service.update({ action: 'replace-key', provider: 'glm', apiKey: 'glm-user-key' });
+    await service.update({ action: 'select-model', provider: 'glm', model: 'glm-5.3' });
+    expect(service.active().apiKey).toBe('glm-user-key');
+
+    const result = await service.update({ action: 'remove-key', provider: 'glm' });
+    expect(result.activeProvider).toBe('glm');
+    expect(result.providers.glm.keySource).toBe('env');
+    expect(service.active().apiKey).toBe('glm-env-key');
   });
-  it('拒绝换行注入、空密钥和意外字段', () => {
-    for (const apiKey of ['', 'sk-key\nPORT=1', 'sk-key"']) {
-      expect(ApiKeyUpdateSchema.safeParse({ action: 'replace', apiKey }).success).toBe(false);
+
+  it('当前服务商的两处都没有 Key 时才拒绝调用', () => {
+    config.providers.deepseek.apiKey = '';
+    expect(() => service.active()).toThrow(ServiceUnavailableException);
+    expect(() => service.active()).toThrow(/未配置DeepSeek API Key/);
+  });
+
+  it('拒绝不受支持的模型和 API Key 格式', async () => {
+    await expect(
+      service.update({ action: 'select-model', provider: 'glm', model: 'unknown' }),
+    ).rejects.toThrow('当前不可用');
+    for (const apiKey of ['', 'key\nINJECT=1', 'key"with-quote']) {
+      expect(
+        ApiKeyUpdateSchema.safeParse({ action: 'replace-key', provider: 'glm', apiKey }).success,
+      ).toBe(false);
     }
-    expect(ApiKeyUpdateSchema.safeParse({ action: 'remove', apiKey: 'unused' }).success).toBe(
-      false,
-    );
-  });
-  it('并发保存拒绝第二个请求，不交错更新文件和内存', async () => {
-    const first = service.update({ action: 'replace', apiKey: 'sk-first' });
-    await expect(service.update({ action: 'replace', apiKey: 'sk-second' })).rejects.toThrow(
-      '正在保存配置',
-    );
-    await first;
-    expect(config.apiKey).toBe('sk-first');
   });
 });

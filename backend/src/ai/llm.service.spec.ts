@@ -8,41 +8,18 @@ import { ModelRegistry } from './models/model.registry.js';
 import { PromptRegistry } from './prompts/prompt.registry.js';
 import { UsageRecorder } from './observability/usage-recorder.js';
 import { LlmService } from './llm.service.js';
+import { makeAiConfig } from '../../test/ai-config-fixture.js';
 
 const API_KEY = 'secret-key-value';
 
 function makeConfig(overrides: Partial<AiConfig> = {}): AiConfig {
-  return {
-    baseUrl: 'https://api.deepseek.com',
-    apiKey: API_KEY,
-    usages: {
-      draft: {
-        model: 'deepseek-flash',
-        temperature: 0.9,
-        maxTokens: 2048,
-        timeout: 60_000,
-        thinking: false,
-      },
-      reasoning: {
-        model: 'deepseek-flash',
-        temperature: 0.3,
-        maxTokens: 4096,
-        timeout: 120_000,
-        thinking: true,
-      },
+  return makeAiConfig({
+    providers: {
+      ...makeAiConfig().providers,
+      deepseek: { ...makeAiConfig().providers.deepseek, apiKey: API_KEY },
     },
-    retry: {
-      maxAttempts: 3,
-      initialInterval: 10,
-      backoffFactor: 1,
-      maxInterval: 20,
-      jitter: false,
-    },
-    structured: { maxRepairAttempts: 2 },
-    budget: { maxCallsPerRequest: 6 },
-    pricing: { inputPerMTokens: null, outputPerMTokens: null },
     ...overrides,
-  };
+  });
 }
 
 function fakeModel() {
@@ -62,7 +39,7 @@ function setup(overrides: Partial<AiConfig> = {}) {
     resolve: jest.fn(() => ({
       model,
       modelName: 'deepseek-flash',
-      thinking: false,
+      provider: 'deepseek',
       temperature: 0.9,
       maxTokens: 2048,
       timeoutMs: 60_000,
@@ -74,7 +51,7 @@ function setup(overrides: Partial<AiConfig> = {}) {
 }
 
 describe('LlmService.complete', () => {
-  it('默认使用 draft 用途并返回内容与 traceId', async () => {
+  it('使用当前模型并返回内容与 traceId', async () => {
     const { service, registry, invoke } = setup();
     invoke.mockResolvedValue({
       content: '收到',
@@ -83,20 +60,10 @@ describe('LlmService.complete', () => {
 
     const result = await service.complete([{ role: 'user', content: 'hi' }]);
 
-    expect(registry.resolve).toHaveBeenCalledWith('draft', {});
+    expect(registry.resolve).toHaveBeenCalledWith({});
     expect(result.content).toBe('收到');
-    expect(result.usageKind).toBe('draft');
     expect(result.traceId).toBeDefined();
     expect(result.usage?.totalTokens).toBe(5);
-  });
-
-  it('可指定 reasoning 用途', async () => {
-    const { service, registry, invoke } = setup();
-    invoke.mockResolvedValue({ content: 'ok' });
-
-    await service.complete([{ role: 'user', content: 'hi' }], { usage: 'reasoning' });
-
-    expect(registry.resolve).toHaveBeenCalledWith('reasoning', {});
   });
 
   it('限流错误退避重试后成功', async () => {
@@ -138,6 +105,33 @@ describe('LlmService.complete', () => {
 });
 
 describe('LlmService.completeStructured', () => {
+  it.each([
+    { error: Object.assign(new Error('认证失败'), { status: 401 }), calls: 1 },
+    { error: Object.assign(new Error('限流'), { status: 429 }), calls: 3 },
+    { error: new Error('Request timed out.'), calls: 3 },
+    { error: new Error('Connection error.'), calls: 3 },
+  ])('传输错误不进入输出修复（$calls 次调用）', async ({ error, calls }) => {
+    const { service, structuredInvoke } = setup();
+    structuredInvoke.mockRejectedValue(error);
+    await expect(
+      service.completeStructured(SampleBookSchema, [{ role: 'user', content: 'x' }]),
+    ).rejects.toThrow(error.message);
+    expect(structuredInvoke).toHaveBeenCalledTimes(calls);
+    for (const [messages] of structuredInvoke.mock.calls) expect(messages).toHaveLength(1);
+  });
+
+  it('网络重试与输出修复共用总调用预算', async () => {
+    const { service, structuredInvoke } = setup({ budget: { maxCallsPerRequest: 2 } });
+    structuredInvoke
+      .mockRejectedValueOnce(Object.assign(new Error('短暂故障'), { status: 503 }))
+      .mockResolvedValueOnce({ title: '缺少摘要和标签' })
+      .mockResolvedValue({ title: '不应再调用', summary: '简介', tags: ['测试'] });
+    await expect(
+      service.completeStructured(SampleBookSchema, [{ role: 'user', content: 'x' }]),
+    ).rejects.toThrow('预算上限');
+    expect(structuredInvoke).toHaveBeenCalledTimes(2);
+  });
+
   it('摘要长度或数量超限时回喂校验错误，修复后返回完整结果', async () => {
     const { service, structuredInvoke } = setup();
     const valid = {
@@ -173,15 +167,13 @@ describe('LlmService.completeStructured', () => {
       }),
     ).rejects.toThrow('截断');
   });
-  it('结构化生成强制关闭思维链', async () => {
+  it('结构化生成使用相同的当前模型', async () => {
     const { service, registry, structuredInvoke } = setup();
     structuredInvoke.mockResolvedValue({ title: 't', summary: 's', tags: ['a'] });
 
-    await service.completeStructured(SampleBookSchema, [{ role: 'user', content: 'x' }], {
-      usage: 'reasoning',
-    });
+    await service.completeStructured(SampleBookSchema, [{ role: 'user', content: 'x' }]);
 
-    expect(registry.resolve).toHaveBeenCalledWith('reasoning', { thinking: false });
+    expect(registry.resolve).toHaveBeenCalledWith({});
   });
 
   it('maxTokens 透传到模型构造参数（invoke 选项会被 SDK 忽略）', async () => {
@@ -192,10 +184,7 @@ describe('LlmService.completeStructured', () => {
       maxTokens: 8192,
     });
 
-    expect(registry.resolve).toHaveBeenCalledWith('draft', {
-      thinking: false,
-      maxTokens: 8192,
-    });
+    expect(registry.resolve).toHaveBeenCalledWith({ maxTokens: 8192 });
   });
 
   it('校验失败时回喂错误重试，第二次成功', async () => {

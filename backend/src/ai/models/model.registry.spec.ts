@@ -1,97 +1,57 @@
-import { AiConfig } from '../config/ai.config.js';
-import { ModelRegistry, buildChatModelOptions } from './model.registry.js';
-
-const config: AiConfig = {
-  baseUrl: 'https://api.deepseek.com',
-  apiKey: 'secret-key-value',
-  usages: {
-    draft: {
-      model: 'deepseek-flash',
-      temperature: 0.9,
-      maxTokens: 2048,
-      timeout: 60_000,
-      thinking: false,
-    },
-    reasoning: {
-      model: 'deepseek-flash',
-      temperature: 0.3,
-      maxTokens: 4096,
-      timeout: 120_000,
-      thinking: true,
-    },
-  },
-  retry: {
-    maxAttempts: 3,
-    initialInterval: 10,
-    backoffFactor: 1,
-    maxInterval: 20,
-    jitter: false,
-  },
-  structured: { maxRepairAttempts: 2 },
-  budget: { maxCallsPerRequest: 6 },
-  pricing: { inputPerMTokens: null, outputPerMTokens: null },
-};
-
-describe('buildChatModelOptions', () => {
-  it('草稿用途显式关闭思维链', () => {
-    const options = buildChatModelOptions(config, config.usages.draft);
-    expect(options.modelKwargs.thinking).toEqual({ type: 'disabled' });
-  });
-
-  it('重推理用途显式开启思维链', () => {
-    const options = buildChatModelOptions(config, config.usages.reasoning);
-    expect(options.modelKwargs.thinking).toEqual({ type: 'enabled' });
-  });
-
-  it('overrides 可强制关闭思维链（结构化生成使用）', () => {
-    const options = buildChatModelOptions(config, config.usages.reasoning, { thinking: false });
-    expect(options.modelKwargs.thinking).toEqual({ type: 'disabled' });
-  });
-
-  it('思维链开关永不为 undefined', () => {
-    for (const usage of ['draft', 'reasoning'] as const) {
-      const options = buildChatModelOptions(config, config.usages[usage]);
-      expect(options.modelKwargs.thinking.type).toBeDefined();
-    }
-  });
-
-  it('baseURL、密钥与超时来自配置', () => {
-    const options = buildChatModelOptions(config, config.usages.draft);
-    expect(options.configuration.baseURL).toBe('https://api.deepseek.com');
-    expect(options.apiKey).toBe('secret-key-value');
-    // 超时由 SDK 中断调用，超时错误归入服务端错误参与重试
-    expect(options.timeout).toBe(config.usages.draft.timeout);
-  });
-});
+import { ChatDeepSeek } from '@langchain/deepseek';
+import { ChatOpenAI } from '@langchain/openai';
+import { makeAiConfig } from '../../../test/ai-config-fixture.js';
+import { ModelRegistry } from './model.registry.js';
 
 describe('ModelRegistry', () => {
-  it('按用途解析模型并带上参数', () => {
+  it('默认解析 DeepSeek 当前模型和通用参数', () => {
+    const config = makeAiConfig();
     const registry = new ModelRegistry(config);
-    const resolved = registry.resolve('draft');
+    const resolved = registry.resolve();
+    expect(resolved.model).toBeInstanceOf(ChatDeepSeek);
+    expect(resolved.provider).toBe('deepseek');
     expect(resolved.modelName).toBe('deepseek-flash');
-    expect(resolved.thinking).toBe(false);
     expect(resolved.temperature).toBe(0.9);
+    expect(resolved.maxTokens).toBe(4096);
   });
 
-  it('结构化场景强制关闭思维链', () => {
+  it('按用户选择解析 GLM 并限制服务商不支持的 temperature', () => {
+    const config = makeAiConfig({
+      defaults: { temperature: 1.5, maxTokens: 4096, timeout: 30000 },
+    });
+    const settings = {
+      active: () => ({
+        provider: 'glm' as const,
+        apiKey: 'glm-user-key',
+        baseUrl: config.providers.glm.baseUrl,
+        model: config.providers.glm.model,
+        temperature: config.defaults.temperature,
+        maxTokens: config.defaults.maxTokens,
+        timeout: config.defaults.timeout,
+      }),
+    };
+    const registry = new ModelRegistry(config, settings as never);
+    const resolved = registry.resolve();
+    expect(resolved.model).toBeInstanceOf(ChatOpenAI);
+    expect(resolved.provider).toBe('glm');
+    expect(resolved.modelName).toBe('glm-5.3');
+    expect(resolved.temperature).toBeLessThan(1);
+  });
+
+  it('调用级输出上限覆盖默认值', () => {
+    const registry = new ModelRegistry(makeAiConfig());
+    expect(registry.resolve().maxTokens).toBe(4096);
+    expect(registry.resolve({ maxTokens: 8192 }).maxTokens).toBe(8192);
+  });
+
+  it('缺少环境密钥时仍可创建客户端，由设置服务在真实调用前返回配置错误', () => {
+    const config = makeAiConfig({
+      providers: {
+        ...makeAiConfig().providers,
+        deepseek: { ...makeAiConfig().providers.deepseek, apiKey: '' },
+      },
+    });
     const registry = new ModelRegistry(config);
-    const resolved = registry.resolve('reasoning', { thinking: false });
-    expect(resolved.thinking).toBe(false);
-  });
-
-  it('overrides.maxTokens 覆盖用途默认输出上限', () => {
-    const registry = new ModelRegistry(config);
-    // 未传时用用途默认值
-    expect(registry.resolve('draft').maxTokens).toBe(2048);
-    // 传入时覆盖（大纲生成用 OUTLINE_MAX_TOKENS 提升输出预算）
-    expect(registry.resolve('draft', { maxTokens: 8192 }).maxTokens).toBe(8192);
-    expect(buildChatModelOptions(config, config.usages.draft, { maxTokens: 8192 }).maxTokens).toBe(
-      8192,
-    );
-  });
-
-  it('未配置密钥时使用占位值，不影响构造', () => {
-    const registry = new ModelRegistry({ ...config, apiKey: '' });
-    expect(() => registry.resolve('draft')).not.toThrow();
+    expect(() => registry.resolve()).not.toThrow();
   });
 });

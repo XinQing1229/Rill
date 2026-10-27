@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Genre, QuestionnaireDefinition } from '@rill/shared';
+import type { GenreSelection, QuestionnaireDefinition } from '@rill/shared';
 import { getQuestionnaire } from '../api/novel';
 
 export interface QuestionnaireState {
@@ -10,14 +10,19 @@ export interface QuestionnaireState {
 }
 
 /** 按类型请求问卷结构；类型切换时清空旧结构并重新请求（级联） */
-export function useQuestionnaire(genre: Genre | undefined): QuestionnaireState {
+export function useQuestionnaire(genre: GenreSelection | undefined): QuestionnaireState {
   const [data, setData] = useState<QuestionnaireDefinition | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [epoch, setEpoch] = useState(0);
 
+  const genreKey = genre === undefined ? undefined : JSON.stringify(genre);
+
   useEffect(() => {
-    if (!genre) {
+    const selection: GenreSelection | undefined = genreKey
+      ? (JSON.parse(genreKey) as GenreSelection)
+      : undefined;
+    if (!selection) {
       setData(null);
       setError(null);
       setLoading(false);
@@ -27,7 +32,7 @@ export function useQuestionnaire(genre: Genre | undefined): QuestionnaireState {
     setData(null);
     setLoading(true);
     setError(null);
-    getQuestionnaire(genre)
+    getQuestionnaire(Array.isArray(selection) && selection.length === 1 ? selection[0] : selection)
       .then((definition) => {
         if (cancelled) return;
         setData(definition);
@@ -41,7 +46,7 @@ export function useQuestionnaire(genre: Genre | undefined): QuestionnaireState {
     return () => {
       cancelled = true;
     };
-  }, [genre, epoch]);
+  }, [genreKey, epoch]);
 
   const reload = useCallback(() => setEpoch((value) => value + 1), []);
   return { data, loading, error, reload };

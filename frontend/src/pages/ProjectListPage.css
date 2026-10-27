@@ -1,0 +1,430 @@
+/* 项目首页按参考图使用浅色侧栏、统计卡片与空白封面。 */
+.shell.shell-project-list {
+  background: #f6f6f7;
+}
+
+.shell-project-list .sheet {
+  margin: 0;
+  border: 0;
+  border-radius: 14px 0 0 0;
+  min-height: 100dvh;
+}
+
+.page.project-list {
+  --project-muted: #737b88;
+  max-width: none;
+  padding: 36px 38px;
+}
+
+.project-list .title-row {
+  align-items: center;
+  margin-bottom: 36px;
+}
+
+.project-list .title-row h1 {
+  font-size: 34px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.project-list .title-row .sub {
+  font-size: 17px;
+  color: var(--project-muted);
+  margin-top: 8px;
+}
+
+.project-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.project-list-actions .ant-input-affix-wrapper {
+  width: 280px;
+  height: 46px;
+  border-color: #e3e5e9;
+  border-radius: 10px;
+  background: #fafafa;
+  font-size: 16px;
+}
+
+.project-list-actions .ant-input-prefix {
+  color: #626975;
+  margin-right: 12px;
+}
+
+.project-list-actions .ant-btn {
+  height: 46px;
+  padding-inline: 24px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+
+.project-list .kpis {
+  grid-auto-flow: unset;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+  margin-bottom: 22px;
+  border: 0;
+}
+
+.project-list .kpi {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  column-gap: 20px;
+  min-height: 126px;
+  padding: 20px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 14px;
+}
+
+.project-list .kpi-icon {
+  display: grid;
+  place-items: center;
+  grid-row: 1 / 3;
+  align-self: start;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  font-size: 24px;
+}
+
+.project-list .kpi-label {
+  font-size: 16px;
+  color: #666d78;
+  padding-top: 4px;
+}
+
+.project-list .kpi-value {
+  font-size: 32px;
+  line-height: 1.3;
+  margin-top: 8px;
+}
+
+.project-list .kpi-total {
+  background: #f4f8ff;
+}
+.project-list .kpi-total .kpi-icon {
+  color: #3669ff;
+  background: #e7f0ff;
+}
+.project-list .kpi-idle {
+  background: #fdf9f2;
+}
+.project-list .kpi-idle .kpi-icon {
+  color: #e78a08;
+  background: #fff2df;
+}
+.project-list .kpi-running {
+  background: #f8f5ff;
+}
+.project-list .kpi-running .kpi-icon {
+  color: #7547ed;
+  background: #f0eaff;
+}
+.project-list .kpi-failed {
+  background: #fdf5f6;
+}
+.project-list .kpi-failed .kpi-icon {
+  color: #ec303b;
+  background: #fde9ec;
+}
+
+.project-list .rows {
+  gap: 14px;
+}
+
+.project-list .row {
+  min-height: 150px;
+  box-sizing: border-box;
+  gap: 28px;
+  padding: 18px 20px;
+  border: 1px solid #e6e8ec;
+  border-radius: 13px;
+  background: #fff;
+  cursor: default;
+}
+
+.project-list .row[role='button'] {
+  cursor: pointer;
+}
+
+.project-list .row:hover {
+  background: #fcfcfd;
+  border-color: #ced4df;
+}
+
+.project-list .row:focus-visible {
+  outline: 2px solid #5266bf;
+  outline-offset: 3px;
+}
+
+.project-cover {
+  flex: 0 0 96px;
+  height: 112px;
+  border-radius: 10px;
+  background: #f3f4f6;
+}
+
+.project-info {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+}
+
+.project-list .row .t {
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.project-list .project-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  color: var(--project-muted);
+  font-size: 15px;
+}
+
+.project-list .row .stage-cell {
+  min-width: 0;
+  gap: 12px;
+  color: var(--project-muted);
+  font-size: 16px;
+}
+
+.project-list .stage-cell strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.project-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 999px;
+}
+
+.project-list .project-status .pill {
+  font-size: 14px;
+  padding: 6px 15px;
+  white-space: nowrap;
+}
+
+.project-publication {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.project-list .project-publication .sub {
+  color: var(--project-muted);
+  font-size: 15px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.project-list .publication-select {
+  width: 140px;
+  height: 44px;
+  font-size: 16px;
+}
+
+.project-list .row .when {
+  font-size: 14px;
+  margin-left: auto;
+  min-width: 120px;
+  color: var(--project-muted);
+}
+
+.project-more .ant-btn {
+  width: 44px;
+  height: 44px;
+  color: #737b88;
+  font-size: 22px;
+}
+
+.project-list-scope {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+@media (max-width: 1399px) {
+  .page.project-list {
+    padding: 30px 28px;
+  }
+  .project-list .row {
+    gap: 18px;
+  }
+  .project-list .row .when {
+    min-width: 85px;
+  }
+  .project-publication {
+    gap: 10px;
+  }
+  .project-list .project-publication .sub {
+    display: none;
+  }
+  .project-list .publication-select {
+    width: 120px;
+  }
+  .project-list .row .t {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .project-list .title-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .project-list-actions {
+    width: 100%;
+  }
+  .project-list-actions .ant-input-affix-wrapper {
+    flex: 1;
+    width: auto;
+  }
+  .project-list .kpis {
+    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .project-list .row {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+    gap: 16px;
+  }
+  .project-cover {
+    width: 76px;
+    height: 100px;
+    grid-row: 1 / 3;
+  }
+  .project-info {
+    grid-column: 2;
+  }
+  .project-status {
+    grid-row: 2;
+    grid-column: 2;
+    justify-self: start;
+  }
+  .project-publication {
+    grid-row: 2;
+    grid-column: 3;
+  }
+  .project-list .row .when {
+    grid-row: 3;
+    grid-column: 2;
+    text-align: left;
+    margin: 0;
+  }
+  .project-more {
+    grid-row: 1;
+    grid-column: 3;
+    justify-self: end;
+  }
+}
+
+@media (max-width: 719px) {
+  .shell.shell-project-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell-project-list .sheet {
+    border-radius: 14px 14px 0 0;
+    min-height: 70dvh;
+  }
+  .page.project-list {
+    padding: 24px 16px;
+  }
+  .project-list .title-row h1 {
+    font-size: 30px;
+  }
+  .project-list .title-row .sub {
+    font-size: 14px;
+  }
+  .project-list-actions {
+    gap: 10px;
+  }
+  .project-list-actions .ant-btn {
+    padding-inline: 12px;
+    font-size: 14px;
+  }
+  .project-list .kpi {
+    padding: 16px 12px;
+    column-gap: 12px;
+    grid-template-columns: 40px minmax(0, 1fr);
+    min-height: 110px;
+  }
+  .project-list .kpi-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+  .project-list .kpi-label {
+    font-size: 14px;
+  }
+  .project-list .row {
+    padding: 14px;
+    grid-template-columns: 56px minmax(0, 1fr) 44px;
+    gap: 12px;
+  }
+  .project-cover {
+    width: 56px;
+    height: 78px;
+    grid-row: 1;
+  }
+  .project-list .row .t {
+    font-size: 16px;
+  }
+  .project-list .project-meta {
+    font-size: 13px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .project-list .row .stage-cell {
+    font-size: 14px;
+  }
+  .project-status {
+    grid-column: 1 / 3;
+  }
+  .project-publication {
+    grid-row: 3;
+    grid-column: 1 / 4;
+    justify-self: end;
+  }
+  .project-list .row .when {
+    grid-row: 4;
+    grid-column: 1 / 4;
+  }
+}
+
+/* 回收站继续展示恢复与永久删除操作，窄屏下自然换行。 */
+.project-list .project-trash-row {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 110px;
+}
+
+.project-trash-row .t {
+  flex: 1 1 220px;
+}
+
+.project-trash-row .ant-btn {
+  min-height: 44px;
+}
+
+.project-cover {
+  overflow: hidden;
+}
+.project-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

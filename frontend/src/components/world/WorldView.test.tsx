@@ -28,6 +28,18 @@ describe('WorldView', () => {
     expect(screen.getByText(worldData.powerSystem.cost)).toBeInTheDocument();
   });
 
+  it('组合类型同时展示全部世界观自定义块', () => {
+    render(
+      <WorldView
+        genre={['xuanhuan', 'dushi']}
+        world={{ ...worldData, industry: { field: '金融', rules: '交易制度' } }}
+      />,
+    );
+    expect(screen.getByText('力量体系')).toBeInTheDocument();
+    expect(screen.getByText('金融')).toBeInTheDocument();
+    expect(screen.getByText('交易制度')).toBeInTheDocument();
+  });
+
   it('没有自定义块的类型降级为提示', () => {
     const generic = {
       summary: worldData.summary,

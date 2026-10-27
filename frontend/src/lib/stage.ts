@@ -1,5 +1,5 @@
 import {
-  GENRE_LABELS,
+  genreLabel,
   WRITING_STYLE_LABELS,
   LENGTH_LABELS,
   STAGES,
@@ -153,7 +153,7 @@ export function stageTokens(
 /** 问卷已选维度的只读摘要（类型 · 篇幅 · 阅读体验 · 视角） */
 export function chosenDimensionsLabel(answers: QuestionnaireAnswers): string {
   return [
-    GENRE_LABELS[answers.genre] ?? answers.genre,
+    genreLabel(answers.genre),
     LENGTH_LABELS[answers.length] ?? '历史篇幅',
     answers.tone,
     answers.pov,

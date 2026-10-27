@@ -9,6 +9,7 @@ export interface TokenUsage {
 export interface UsageRecord {
   traceId: string;
   model: string;
+  provider: 'deepseek' | 'glm';
   calls: number;
   promptTokens: number;
   completionTokens: number;
@@ -64,12 +65,12 @@ export class UsageRecorder {
   constructor(@Inject(AI_CONFIG) private readonly config: AiConfig) {}
 
   /** 为单次模型调用创建 LangChain 回调（每次调用一个实例） */
-  callbacks(traceId: string, model: string) {
+  callbacks(traceId: string, model: string, provider: 'deepseek' | 'glm' = 'deepseek') {
     const startedAt = Date.now();
     return {
       handleLLMEnd: (output: unknown): void => {
         const usage = extractTokenUsage(output);
-        this.merge(traceId, model, usage, Date.now() - startedAt);
+        this.merge(traceId, model, usage, Date.now() - startedAt, provider);
       },
       handleLLMError: (): void => {
         this.merge(
@@ -77,12 +78,19 @@ export class UsageRecorder {
           model,
           { promptTokens: 0, completionTokens: 0 },
           Date.now() - startedAt,
+          provider,
         );
       },
     };
   }
 
-  merge(traceId: string, model: string, usage: TokenUsage, durationMs: number): void {
+  merge(
+    traceId: string,
+    model: string,
+    usage: TokenUsage,
+    durationMs: number,
+    provider: 'deepseek' | 'glm' = 'deepseek',
+  ): void {
     const now = Date.now();
     this.evict(now);
 
@@ -90,6 +98,7 @@ export class UsageRecorder {
     const record: UsageRecord = existing ?? {
       traceId,
       model,
+      provider,
       calls: 0,
       promptTokens: 0,
       completionTokens: 0,
@@ -100,12 +109,13 @@ export class UsageRecorder {
     };
 
     record.model = model;
+    record.provider = provider;
     record.calls += 1;
     record.promptTokens += usage.promptTokens;
     record.completionTokens += usage.completionTokens;
     record.totalTokens = record.promptTokens + record.completionTokens;
     record.durationMs += durationMs;
-    record.estimatedCost = this.estimateCost(record);
+    record.estimatedCost = this.estimateCost(record, provider);
     record.lastTouchedAt = now;
 
     this.records.set(traceId, record);
@@ -137,7 +147,8 @@ export class UsageRecorder {
     }
   }
 
-  private estimateCost(record: UsageRecord): number | null {
+  private estimateCost(record: UsageRecord, provider: 'deepseek' | 'glm'): number | null {
+    if (provider === 'glm') return null;
     const { inputPerMTokens, outputPerMTokens } = this.config.pricing;
     if (inputPerMTokens === null || outputPerMTokens === null) return null;
     const inputCost = (record.promptTokens / 1_000_000) * inputPerMTokens;

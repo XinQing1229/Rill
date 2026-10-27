@@ -1,9 +1,19 @@
+import { CoverWorkbench } from '../components/cover/CoverWorkbench';
+import { CoverThumbnail } from '../components/cover/CoverThumbnail';
+import {
+  ApartmentOutlined,
+  BookOutlined,
+  CalendarOutlined,
+  RightOutlined,
+  SettingOutlined,
+} from '@ant-design/icons';
+import './ProjectWorkspacePage.css';
 import { BookExportWorkbench } from '../components/book-export/BookExportWorkbench';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Modal, Skeleton, Tag } from 'antd';
+import { Alert, App, Button, Modal, Skeleton } from 'antd';
 import { Link, useParams } from 'react-router-dom';
 import {
-  GENRE_LABELS,
+  genreLabel,
   WRITING_STYLE_LABELS,
   LENGTH_LABELS,
   STAGE_LABELS,
@@ -16,7 +26,7 @@ import { PipelineModeSelect } from '../components/PipelineModeSelect';
 import { StatusTag } from '../components/StatusTag';
 import { useProject } from '../hooks/useProject';
 import { useWorkspaceProject } from '../hooks/useWorkspaceProject';
-import { isImplementedStage, readStageState } from '../lib/stage';
+import { isImplementedStage, readStageState, timelineStages } from '../lib/stage';
 
 const backArrow = (
   <svg
@@ -67,7 +77,7 @@ export function ProjectWorkspacePage() {
   const dimensionChips = useMemo(() => {
     if (!answers) return [];
     return [
-      GENRE_LABELS[answers.genre] ?? answers.genre,
+      genreLabel(answers.genre),
       LENGTH_LABELS[answers.length] ?? '历史篇幅',
       answers.tone,
       answers.pov,
@@ -126,10 +136,12 @@ export function ProjectWorkspacePage() {
 
   const stage = viewedStage?.kind === 'stage' ? viewedStage.stage : project.currentStage;
   const viewingExport = viewedStage?.kind === 'book-export';
+  const viewingCover = viewedStage?.kind === 'cover';
   const currentState = readStageState(project, project.currentStage);
   const currentImplemented = isImplementedStage(project.currentStage);
   const canConfirm =
     !viewingExport &&
+    !viewingCover &&
     project.currentStage !== 'outline' &&
     project.currentStage !== 'prose' &&
     project.mode === 'manual' &&
@@ -148,19 +160,34 @@ export function ProjectWorkspacePage() {
   };
 
   return (
-    <div>
-      <div className="builder-bar">
+    <div className="workspace-page">
+      <div className="builder-bar workspace-toolbar">
         <Link to="/" className="back" aria-label="返回项目">
-          {backArrow}
+          {backArrow}项目
         </Link>
-        <h1>{project.title}</h1>
-        <StatusTag status={project.status} />
-        {project.status === 'failed' && (
-          <span className="hint">上次生成失败，可在对应阶段重试</span>
+        <RightOutlined className="workspace-crumb-separator" aria-hidden="true" />
+        <span className="workspace-crumb-title">{project.title}</span>
+        {viewingCover && (
+          <>
+            <RightOutlined className="workspace-crumb-separator" aria-hidden="true" />
+            <span className="workspace-crumb-title">封面管理</span>
+          </>
         )}
         <div className="right">
-          <Tag>{project.mode === 'manual' ? '手动推进' : '自动推进'}</Tag>
-          <Button onClick={() => setDraftMode(project.mode)}>项目设置</Button>
+          {viewingCover ? (
+            <Button onClick={() => setViewedStage(null)}>返回项目</Button>
+          ) : (
+            <span className="workspace-mode">
+              {project.mode === 'manual' ? '手动推进' : '自动推进'}
+            </span>
+          )}
+          <Button
+            type="primary"
+            icon={<SettingOutlined aria-hidden="true" />}
+            onClick={() => setDraftMode(project.mode)}
+          >
+            项目设置
+          </Button>
           {canConfirm && (
             <Button type="primary" loading={busy} onClick={() => handleConfirm()}>
               确认并推进
@@ -190,20 +217,57 @@ export function ProjectWorkspacePage() {
         </p>
       </Modal>
       <div className="page">
-        {answers !== null && (
-          <div style={{ marginBottom: 20 }}>
-            <p className="dim-caption">问卷已选维度（只读）</p>
-            <div className="dim-chips">
-              {dimensionChips.map((chip) => (
-                <span key={chip} className="dim-chip">
-                  {chip}
-                </span>
-              ))}
+        <section className="workspace-overview" aria-label="项目信息">
+          <button
+            className="workspace-cover"
+            aria-label="管理项目封面"
+            onClick={() => setViewedStage({ kind: 'cover' })}
+          >
+            <CoverThumbnail
+              projectId={project.id}
+              assetId={project.cover?.assetId}
+              alt="项目封面"
+            />
+          </button>
+          <div className="workspace-overview-body">
+            <div className="workspace-title-row">
+              <h1>{project.title}</h1>
+              <StatusTag status={project.status} />
             </div>
+            <div className="workspace-project-meta">
+              <span>
+                <BookOutlined aria-hidden="true" />
+                小说创作
+              </span>
+              <span>
+                <ApartmentOutlined aria-hidden="true" />
+                {timelineStages(project.stages).length} 个阶段
+              </span>
+              <span>
+                <CalendarOutlined aria-hidden="true" />
+                最近更新{' '}
+                <time dateTime={project.updatedAt}>{formatProjectDate(project.updatedAt)}</time>
+              </span>
+            </div>
+            {project.status === 'failed' && <p className="hint">上次生成失败，可在对应阶段重试</p>}
+            {answers !== null && (
+              <div className="workspace-dimensions">
+                <p className="dim-caption">问卷已选维度（只读）</p>
+                <div className="dim-chips">
+                  {dimensionChips.map((chip) => (
+                    <span key={chip} className="dim-chip">
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </section>
         <div className="canvas-well">
-          {viewingExport ? (
+          {viewingCover ? (
+            <CoverWorkbench key={project.id} projectId={project.id} onChanged={refresh} />
+          ) : viewingExport ? (
             <BookExportWorkbench key={project.id} projectId={project.id} />
           ) : (
             <StagePanel
@@ -235,4 +299,11 @@ export function ProjectWorkspacePage() {
   function handleConfirm() {
     void runAction(() => confirmStage(project!.id), '已确认，正在生成下一阶段');
   }
+}
+
+/** 日期采用用户浏览器的本地时区，与工作台其他时间展示一致。 */
+function formatProjectDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '未知';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }

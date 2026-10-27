@@ -122,6 +122,7 @@ export function makeProject(overrides: Partial<ProjectDetail> = {}): ProjectDeta
     mode: 'manual',
     currentStage: 'premise',
     status: 'idle',
+    publicationStatus: 'writing',
     stages: stageList,
     answers: JSON.stringify({
       genre: 'xuanhuan',
@@ -152,6 +153,7 @@ export function makeSummary(overrides: Partial<ProjectSummary> = {}): ProjectSum
     mode: 'manual',
     currentStage: 'premise',
     status: 'idle',
+    publicationStatus: 'writing',
     createdAt: '2026-01-01T09:00:00.000Z',
     updatedAt: '2026-01-01T10:01:00.000Z',
     deletedAt: null,

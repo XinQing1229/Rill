@@ -665,7 +665,7 @@ export class ProseService {
               }),
             },
           ],
-          { traceId, usage: 'draft', maxTokens: 8192 },
+          { traceId, maxTokens: 8192 },
         ),
       );
       if (!result.content.trim()) throw new BadRequestException('正文输出为空');
@@ -753,7 +753,7 @@ export class ProseService {
                 }),
               },
             ],
-            { traceId, usage: 'reasoning' },
+            { traceId },
           ),
         );
         const output = ProseReviewOutputSchema.parse(returnedOutput);
@@ -873,7 +873,7 @@ export class ProseService {
                   }),
                 },
               ],
-              { traceId, usage: 'draft' },
+              { traceId },
             ),
           ),
         );
